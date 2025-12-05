@@ -3,7 +3,7 @@ import {
   Trash2, Plus, RotateCw, Sparkles, X, LogOut, User, LogIn, AlertTriangle, 
   Settings, ClipboardPaste, Type, CheckSquare, Square,
   Gamepad2, Calculator, Grid, Trophy, Play, RotateCcw, Save, Crown, Eye, EyeOff,
-  AlertCircle, Minus, PlusCircle
+  AlertCircle, Minus, PlusCircle, Edit2
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTLARI ---
@@ -62,14 +62,14 @@ export default function GameCenterApp() {
   
   const [scrabbleData, setScrabbleData] = useState({
     active: false,
-    finished: false, // Oyunun bitip bitmediğini takip etmek için
-    players: [], // { name, scores: [], finalAdjustment: 0 }
+    finished: false, 
+    players: [], 
     history: []
   });
 
   const [okeyData, setOkeyData] = useState({
     active: false,
-    mode: 'single', // 'single' or 'team'
+    mode: 'single', 
     players: [], // { name, scores: [], penalties: [] } 
     history: []
   });
@@ -89,15 +89,18 @@ export default function GameCenterApp() {
   const [selectedPlayerIndex, setSelectedPlayerIndex] = useState(null);
   const [showScrabbleEndModal, setShowScrabbleEndModal] = useState(false);
   const [finisherIndex, setFinisherIndex] = useState(null);
-  const [remainingScores, setRemainingScores] = useState({}); // { playerIndex: score }
-  const [showScrabbleScores, setShowScrabbleScores] = useState(false); // Puanları Göster/Gizle
+  const [remainingScores, setRemainingScores] = useState({}); 
+  const [showScrabbleScores, setShowScrabbleScores] = useState(false); 
 
   // --- 101 OKEY YEREL STATE ---
   const [okeyNewPlayer, setOkeyNewPlayer] = useState('');
-  const [okeyScoreInput, setOkeyScoreInput] = useState(''); // El Puanı
-  const [okeyPenaltyInput, setOkeyPenaltyInput] = useState(''); // Ceza Puanı (Default boş)
+  const [okeyScoreInput, setOkeyScoreInput] = useState(''); 
+  const [okeyPenaltyInput, setOkeyPenaltyInput] = useState(''); 
   const [selectedOkeyPlayerIndex, setSelectedOkeyPlayerIndex] = useState(null);
-  const [okeyModalTab, setOkeyModalTab] = useState('score'); // 'score' (El Puanı) or 'penalty' (Ceza)
+  const [okeyModalTab, setOkeyModalTab] = useState('score'); 
+  
+  // Okey Düzenleme State'i
+  const [editingOkeyItem, setEditingOkeyItem] = useState(null); // { playerIndex, type: 'score'|'penalty', index, value }
 
 
   // --- 1. INITIALIZATION & AUTH ---
@@ -116,17 +119,13 @@ export default function GameCenterApp() {
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        // Çark Verisi
         setWheelData({
           items: data.wheelItems || [],
           settings: data.wheelSettings || { autoRemove: false }
         });
-        // Scrabble Verisi
         setScrabbleData(data.scrabble || { active: false, finished: false, players: [] });
-        // Okey Verisi
         setOkeyData(data.okey || { active: false, mode: 'single', players: [] });
       } else {
-        // İlk kurulum
         setDoc(docRef, { 
           wheelItems: ['Ahmet', 'Mehmet', 'Ayşe'],
           wheelSettings: { autoRemove: false },
@@ -259,7 +258,6 @@ export default function GameCenterApp() {
 
       const updatedPlayers = [...scrabbleData.players];
       const player = updatedPlayers[selectedPlayerIndex];
-      
       const currentRoundOfPlayer = player.scores.length;
       const isSomeoneBehind = updatedPlayers.some((p, idx) => idx !== selectedPlayerIndex && p.scores.length < currentRoundOfPlayer);
       
@@ -276,10 +274,8 @@ export default function GameCenterApp() {
     },
     finishGame: () => {
       if (finisherIndex === null) return alert("Lütfen oyunu bitiren kişiyi seçin.");
-      
       const updatedPlayers = [...scrabbleData.players];
       let sumOfOthers = 0;
-
       updatedPlayers.forEach((p, idx) => {
         if (idx !== finisherIndex) {
           const rem = parseInt(remainingScores[idx] || 0);
@@ -287,9 +283,7 @@ export default function GameCenterApp() {
           sumOfOthers += rem;
         }
       });
-
       updatedPlayers[finisherIndex].finalAdjustment = sumOfOthers; 
-
       updateDb('scrabble', { ...scrabbleData, players: updatedPlayers, active: true, finished: true });
       setShowScrabbleEndModal(false);
     }
@@ -313,10 +307,8 @@ export default function GameCenterApp() {
     reset: () => {
        if(window.confirm("Oyun sıfırlanacak?")) updateDb('okey', { active: false, players: [], mode: 'single' });
     },
-    // GÜNCELLENEN METOD: Tek bir puan türü ekle (El Puanı veya Ceza)
     addSingleScore: (type) => {
       if (selectedOkeyPlayerIndex === null) return;
-      
       let val = 0;
       if (type === 'score') {
         val = parseInt(okeyScoreInput);
@@ -328,32 +320,63 @@ export default function GameCenterApp() {
       if (val === 0 && !window.confirm("0 puan girmek istediğine emin misin?")) return;
 
       const updatedPlayers = [...okeyData.players];
-      
       if (type === 'score') {
-        // El puanı
         updatedPlayers[selectedOkeyPlayerIndex].scores.push(val);
         setOkeyScoreInput('');
         setSelectedOkeyPlayerIndex(null); 
       } else {
-        // Ceza puanı - ayrı diziye
         if (!updatedPlayers[selectedOkeyPlayerIndex].penalties) updatedPlayers[selectedOkeyPlayerIndex].penalties = [];
         updatedPlayers[selectedOkeyPlayerIndex].penalties.push(val);
-        // Cezayı ekledikten sonra pencereyi kapatma, belki başka ceza ekler.
-        // Ama kullanıcı deneyimi için kapatalım, inputu sıfırlayalım.
         setOkeyPenaltyInput(''); 
         alert("Ceza eklendi!");
         setSelectedOkeyPlayerIndex(null);
       }
-      
       updateDb('okey', { ...okeyData, players: updatedPlayers });
+    },
+    // EKLENEN: Puan/Ceza Düzenleme
+    startEditing: (playerIdx, type, itemIdx, val) => {
+      setEditingOkeyItem({
+        playerIndex: playerIdx,
+        type: type, // 'score' or 'penalty'
+        index: itemIdx,
+        value: val
+      });
+    },
+    saveEdit: () => {
+      if (!editingOkeyItem) return;
+      const { playerIndex, type, index, value } = editingOkeyItem;
+      const newVal = parseInt(value);
+      if (isNaN(newVal)) return;
+
+      const updatedPlayers = [...okeyData.players];
+      if (type === 'score') {
+        updatedPlayers[playerIndex].scores[index] = newVal;
+      } else {
+        updatedPlayers[playerIndex].penalties[index] = newVal;
+      }
+      updateDb('okey', { ...okeyData, players: updatedPlayers });
+      setEditingOkeyItem(null);
+    },
+    deleteEdit: () => {
+      if (!editingOkeyItem) return;
+      if (!window.confirm("Bu girişi silmek istediğine emin misin?")) return;
+      
+      const { playerIndex, type, index } = editingOkeyItem;
+      const updatedPlayers = [...okeyData.players];
+      
+      if (type === 'score') {
+        updatedPlayers[playerIndex].scores.splice(index, 1);
+      } else {
+        updatedPlayers[playerIndex].penalties.splice(index, 1);
+      }
+      updateDb('okey', { ...okeyData, players: updatedPlayers });
+      setEditingOkeyItem(null);
     }
   };
 
 
-  // --- RENDER HELPERS ---
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div></div>;
 
-  // --- LOGIN SCREEN ---
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -378,11 +401,9 @@ export default function GameCenterApp() {
     );
   }
 
-  // --- MAIN LAYOUT ---
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-800 pb-20">
       
-      {/* HEADER */}
       <div className="bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-40">
         <div className="flex items-center gap-2" onClick={() => setActiveTab('menu')}>
           <Gamepad2 className="text-indigo-600 cursor-pointer" />
@@ -394,17 +415,14 @@ export default function GameCenterApp() {
         </div>
       </div>
 
-      {/* ERROR TOAST */}
       {dbError && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded z-50 flex items-center gap-2">
           <AlertTriangle size={16}/> {dbError} <X size={16} className="cursor-pointer" onClick={()=>setDbError('')}/>
         </div>
       )}
 
-      {/* CONTENT AREA */}
       <div className="max-w-6xl mx-auto p-4">
         
-        {/* --- MENU VIEW --- */}
         {activeTab === 'menu' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
             <div onClick={() => setActiveTab('wheel')} className="bg-white p-8 rounded-2xl shadow-md hover:shadow-xl transition-all cursor-pointer border-t-4 border-purple-500 flex flex-col items-center gap-4 group">
@@ -432,7 +450,6 @@ export default function GameCenterApp() {
           <div className="animate-fade-in">
             <button onClick={()=>setActiveTab('menu')} className="mb-4 text-gray-500 hover:text-gray-800 flex items-center gap-1">← Menüye Dön</button>
             <div className="flex flex-col-reverse lg:flex-row gap-8 items-start justify-center">
-              {/* Left Panel */}
               <div className="w-full lg:w-1/3 bg-white p-6 rounded-2xl shadow-lg">
                  <div className="flex gap-2 overflow-x-auto pb-2 mb-4 border-b">
                    <button onClick={wheelMethods.loadTr} className="px-3 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200 whitespace-nowrap">TR Alfabe</button>
@@ -445,8 +462,6 @@ export default function GameCenterApp() {
                    <input value={wheelNewItem} onChange={e=>setWheelNewItem(e.target.value)} onKeyDown={e=>e.key==='Enter' && wheelMethods.addItem()} className="flex-1 border p-2 rounded" placeholder="Ekle..." />
                    <button onClick={wheelMethods.addItem} className="bg-purple-600 text-white p-2 rounded"><Plus/></button>
                  </div>
-                 
-                 {/* GERİ GELEN KISIM: Öğe Sayısı ve Toplu Silme */}
                  <div className="flex justify-between items-center mb-2">
                    <span className="text-sm font-semibold text-gray-500">{wheelData.items.length} Öğe</span>
                    {wheelData.items.length > 0 && (
@@ -455,7 +470,6 @@ export default function GameCenterApp() {
                      </button>
                    )}
                  </div>
-
                  <ul className="max-h-96 overflow-y-auto">
                    {wheelData.items.map((item, idx) => (
                      <li key={idx} className="flex justify-between p-2 hover:bg-gray-50 border-b">
@@ -465,7 +479,6 @@ export default function GameCenterApp() {
                    ))}
                  </ul>
               </div>
-              {/* Right Panel (Wheel) */}
               <div className="w-full lg:w-2/3 flex flex-col items-center">
                  <div className="relative w-[300px] h-[300px] sm:w-[400px] sm:h-[400px]">
                     <div className="absolute top-1/2 -right-6 -mt-4 z-20 w-0 h-0 border-t-[16px] border-t-transparent border-b-[16px] border-b-transparent border-r-[30px] border-r-gray-800 drop-shadow-lg"></div>
@@ -501,7 +514,6 @@ export default function GameCenterApp() {
                  </button>
               </div>
             </div>
-            {/* Wheel Winner Modal */}
             {wheelWinner && !wheelSpinning && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                 <div className="bg-white p-8 rounded-xl text-center max-w-sm w-full animate-bounce-in">
@@ -512,7 +524,6 @@ export default function GameCenterApp() {
                 </div>
               </div>
             )}
-            {/* Bulk Import Modal */}
             {showBulkModal && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                 <div className="bg-white p-6 rounded-xl w-full max-w-md">
@@ -533,17 +544,13 @@ export default function GameCenterApp() {
           <div className="animate-fade-in">
             <div className="flex justify-between items-center mb-6">
                <button onClick={()=>setActiveTab('menu')} className="text-gray-500 hover:text-gray-800 flex items-center gap-1">← Menüye Dön</button>
-               
                <div className="flex gap-3">
-                   {/* Gizle/Göster Butonu */}
                    {(scrabbleData.active || scrabbleData.players.length > 0) && !scrabbleData.finished && (
                      <button onClick={() => setShowScrabbleScores(!showScrabbleScores)} className="text-indigo-600 text-sm hover:underline flex items-center gap-1">
                        {showScrabbleScores ? <EyeOff size={14}/> : <Eye size={14}/>}
                        {showScrabbleScores ? 'Gizle' : 'Puanları Göster'}
                      </button>
                    )}
-
-                   {/* Sıfırlama Butonu */}
                    {(scrabbleData.active || scrabbleData.players.length > 0) && (
                      <button onClick={scrabbleMethods.resetGame} className="text-red-500 text-sm hover:underline flex items-center gap-1">
                        <RotateCcw size={14}/> Oyunu Sıfırla
@@ -566,19 +573,15 @@ export default function GameCenterApp() {
               </div>
             ) : (
               <div className="space-y-6">
-                {/* DÜZELTME: Oyun Bitti Bildirimi */}
                 {scrabbleData.finished && (
                   <div className="bg-green-100 border border-green-400 text-green-800 px-4 py-3 rounded relative mb-4 text-center">
                     <strong className="font-bold flex items-center justify-center gap-2 text-xl"><Trophy/> OYUN BİTTİ!</strong>
                     <span className="block sm:inline"> Sonuçlar aşağıdadır. Yeni oyun için "Oyunu Sıfırla" diyebilirsiniz.</span>
                   </div>
                 )}
-
-                {/* Scoreboard Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {scrabbleData.players.map((player, idx) => {
                     const totalScore = player.scores.reduce((a,b)=>a+b, 0) + (player.finalAdjustment || 0);
-                    // En yüksek puanı alanı bulmak için basit bir mantık (gerçek zamanlı hesaplama)
                     const maxScore = Math.max(...scrabbleData.players.map(p => p.scores.reduce((a,b)=>a+b, 0) + (p.finalAdjustment || 0)));
                     const isWinner = scrabbleData.finished && totalScore === maxScore;
                     const displayScore = (scrabbleData.finished || showScrabbleScores) ? totalScore : '???';
@@ -611,7 +614,6 @@ export default function GameCenterApp() {
                     )
                   })}
                 </div>
-
                 {!scrabbleData.finished && (
                   <div className="flex justify-center mt-8">
                     <button onClick={() => setShowScrabbleEndModal(true)} className="bg-gray-800 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:bg-black">
@@ -620,7 +622,6 @@ export default function GameCenterApp() {
                   </div>
                 )}
                 
-                {/* Score Input Modal */}
                 {selectedPlayerIndex !== null && (
                   <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-xl w-full max-w-xs animate-bounce-in">
@@ -643,13 +644,11 @@ export default function GameCenterApp() {
                   </div>
                 )}
 
-                {/* End Game Modal */}
                 {showScrabbleEndModal && (
                   <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 overflow-y-auto py-10">
                     <div className="bg-white p-6 rounded-xl w-full max-w-md relative">
                        <button onClick={()=>setShowScrabbleEndModal(false)} className="absolute top-4 right-4"><X/></button>
                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Trophy className="text-yellow-500"/> Oyun Sonu Hesaplama</h3>
-                       
                        <p className="text-sm text-gray-500 mb-4">1. Son taşı koyarak oyunu bitiren kişiyi seçin.</p>
                        <div className="grid grid-cols-2 gap-2 mb-6">
                          {scrabbleData.players.map((p, idx) => (
@@ -662,7 +661,6 @@ export default function GameCenterApp() {
                            </button>
                          ))}
                        </div>
-
                        {finisherIndex !== null && (
                          <>
                            <p className="text-sm text-gray-500 mb-2">2. Diğer oyuncuların elinde kalan taşların toplam puanını girin.</p>
@@ -729,47 +727,81 @@ export default function GameCenterApp() {
                    const totalAll = sumScores + sumPenalties;
 
                    return (
-                     <div key={idx} className="bg-white rounded-xl shadow border border-gray-100 flex flex-col h-[350px]">
+                     <div key={idx} className="bg-white rounded-xl shadow border border-gray-100 flex flex-col h-[400px]">
+                        {/* Header */}
                         <div className="bg-blue-50 p-4 text-center border-b border-blue-100 flex-shrink-0">
                            <h3 className="font-bold text-gray-800 text-lg truncate">{player.name}</h3>
                            <div className="text-3xl font-black text-blue-600 mt-1">{totalAll}</div>
                            <div className="text-xs text-blue-400 font-medium uppercase tracking-wider">Genel Toplam</div>
                         </div>
                         
-                        <div className="p-2 bg-gray-50 overflow-y-auto flex-1 text-sm custom-scrollbar relative">
-                           {/* El Puanları */}
-                           {player.scores.map((s, si) => (
-                             <div key={si} className="flex justify-between px-2 py-1.5 border-b border-gray-200 text-gray-600 last:border-0">
-                               <span className="text-xs font-mono text-gray-400">{si+1}. El</span>
-                               <span className="font-semibold text-gray-700">{s > 0 ? `+${s}` : s}</span>
+                        {/* List Area */}
+                        <div className="flex-1 overflow-y-auto bg-gray-50 custom-scrollbar p-2">
+                           {/* Scores Section */}
+                           {player.scores.length > 0 && (
+                             <div className="mb-2">
+                               <div className="text-xs font-bold text-gray-400 uppercase mb-1 px-2">Eller</div>
+                               {player.scores.map((s, si) => (
+                                 <div 
+                                   key={`score-${si}`} 
+                                   onClick={() => okeyMethods.startEditing(idx, 'score', si, s)}
+                                   className="flex justify-between px-2 py-1.5 bg-white border border-gray-100 rounded mb-1 cursor-pointer hover:border-blue-300 transition-colors"
+                                 >
+                                   <span className="text-xs font-mono text-gray-400">{si+1}.</span>
+                                   <span className="font-semibold text-gray-700">{s > 0 ? `+${s}` : s}</span>
+                                 </div>
+                               ))}
                              </div>
-                           ))}
+                           )}
+
+                           {/* Penalties Section */}
+                           {(player.penalties && player.penalties.length > 0) && (
+                             <div>
+                               <div className="text-xs font-bold text-red-400 uppercase mb-1 px-2 mt-2">Cezalar</div>
+                               {player.penalties.map((p, pi) => (
+                                 <div 
+                                   key={`penalty-${pi}`} 
+                                   onClick={() => okeyMethods.startEditing(idx, 'penalty', pi, p)}
+                                   className="flex justify-between px-2 py-1.5 bg-red-50 border border-red-100 rounded mb-1 cursor-pointer hover:border-red-300 transition-colors"
+                                 >
+                                   <span className="text-xs font-mono text-red-400">Ceza</span>
+                                   <span className="font-semibold text-red-600">{p}</span>
+                                 </div>
+                               ))}
+                             </div>
+                           )}
                         </div>
 
-                        {/* Cezalar Bölümü (Sabit Alt Kısım) */}
-                        <div className="p-2 border-t border-red-100 bg-red-50 text-red-600 text-xs flex justify-between items-center">
-                           <span className="font-bold uppercase">Cezalar:</span>
-                           <span className="font-bold text-sm">{sumPenalties}</span>
+                        {/* Footer Buttons */}
+                        <div className="flex flex-col border-t border-gray-100">
+                            <button 
+                              onClick={() => { 
+                                setSelectedOkeyPlayerIndex(idx); 
+                                setOkeyModalTab('score'); 
+                                setOkeyScoreInput(''); 
+                              }} 
+                              className="w-full py-3 bg-white hover:bg-blue-50 text-blue-600 font-bold transition-colors flex items-center justify-center gap-2"
+                            >
+                              <PlusCircle size={16} /> Puan Ekle
+                            </button>
+                            <button 
+                              onClick={() => { 
+                                setSelectedOkeyPlayerIndex(idx); 
+                                setOkeyModalTab('penalty'); 
+                                setOkeyPenaltyInput(''); 
+                              }} 
+                              className="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-sm transition-colors border-t border-red-100 flex items-center justify-center gap-2"
+                            >
+                              <AlertCircle size={16} /> Ceza Ekle
+                            </button>
                         </div>
-
-                        <button 
-                          onClick={() => { 
-                            setSelectedOkeyPlayerIndex(idx); 
-                            setOkeyModalTab('score'); 
-                            setOkeyScoreInput(''); 
-                            setOkeyPenaltyInput(''); 
-                          }} 
-                          className="w-full py-3 bg-white hover:bg-blue-50 text-blue-600 font-bold border-t transition-colors flex-shrink-0"
-                        >
-                          + Puan/Ceza Ekle
-                        </button>
                      </div>
                    )
                  })}
                </div>
             )}
 
-            {/* Okey Score Input Modal */}
+            {/* Okey Add Score/Penalty Modal */}
             {selectedOkeyPlayerIndex !== null && (
                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
                   <div className="bg-white p-6 rounded-xl w-full max-w-sm animate-bounce-in">
@@ -778,22 +810,6 @@ export default function GameCenterApp() {
                        <button onClick={()=>setSelectedOkeyPlayerIndex(null)} className="text-gray-400 hover:text-gray-600"><X/></button>
                      </div>
                      
-                     {/* Tablar */}
-                     <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
-                       <button 
-                         onClick={() => { setOkeyModalTab('score'); setOkeyScoreInput(''); }}
-                         className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${okeyModalTab === 'score' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                       >
-                         El Puanı
-                       </button>
-                       <button 
-                         onClick={() => { setOkeyModalTab('penalty'); setOkeyPenaltyInput(''); }}
-                         className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${okeyModalTab === 'penalty' ? 'bg-white shadow text-red-500' : 'text-gray-500 hover:text-gray-700'}`}
-                       >
-                         Ceza Ekle
-                       </button>
-                     </div>
-
                      {/* İçerik */}
                      {okeyModalTab === 'score' ? (
                        <div className="space-y-4">
@@ -824,8 +840,8 @@ export default function GameCenterApp() {
                            <p className="text-xs text-red-400 mb-2">Genelde 101 veya 202 eklenir.</p>
                            
                            <div className="flex gap-2 mb-3">
-                             <button onClick={()=>setOkeyPenaltyInput('101')} className={`flex-1 py-2 rounded border font-bold ${okeyPenaltyInput==='101' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-gray-600 border-gray-300'}`}>101</button>
-                             <button onClick={()=>setOkeyPenaltyInput('202')} className={`flex-1 py-2 rounded border font-bold ${okeyPenaltyInput==='202' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-gray-600 border-gray-300'}`}>202</button>
+                             <button onClick={()=>setOkeyPenaltyInput('101')} className="flex-1 py-2 rounded border font-bold bg-white text-gray-600 border-gray-300 hover:bg-red-50 hover:text-red-500 hover:border-red-200">101</button>
+                             <button onClick={()=>setOkeyPenaltyInput('202')} className="flex-1 py-2 rounded border font-bold bg-white text-gray-600 border-gray-300 hover:bg-red-50 hover:text-red-500 hover:border-red-200">202</button>
                            </div>
 
                            <input 
@@ -845,6 +861,34 @@ export default function GameCenterApp() {
                      )}
                   </div>
                </div>
+            )}
+
+            {/* Okey Edit Modal */}
+            {editingOkeyItem && (
+              <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+                <div className="bg-white p-6 rounded-xl w-full max-w-xs animate-bounce-in">
+                   <h3 className="font-bold text-lg mb-4 text-center">Düzenle</h3>
+                   
+                   <input 
+                     type="number" 
+                     inputMode="numeric"
+                     pattern="[0-9]*"
+                     className="w-full border-2 p-3 rounded-lg text-2xl font-mono text-center mb-4 focus:border-indigo-500 outline-none"
+                     value={editingOkeyItem.value}
+                     onChange={(e) => setEditingOkeyItem({...editingOkeyItem, value: e.target.value})}
+                   />
+
+                   <div className="flex gap-2">
+                     <button onClick={okeyMethods.deleteEdit} className="flex-1 bg-red-100 text-red-600 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-red-200">
+                       <Trash2 size={18}/> Sil
+                     </button>
+                     <button onClick={okeyMethods.saveEdit} className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700">
+                       Güncelle
+                     </button>
+                   </div>
+                   <button onClick={() => setEditingOkeyItem(null)} className="w-full mt-3 text-gray-400 text-sm hover:text-gray-600">İptal</button>
+                </div>
+              </div>
             )}
           </div>
         )}

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Trash2, Plus, RotateCw, Sparkles, X, LogOut, User, LogIn, AlertTriangle, 
   Settings, ClipboardPaste, Type, CheckSquare, Square,
-  Gamepad2, Calculator, Grid, Trophy, Play, RotateCcw, Save, Crown, Eye, EyeOff
+  Gamepad2, Calculator, Grid, Trophy, Play, RotateCcw, Save, Crown, Eye, EyeOff,
+  AlertCircle, Minus, PlusCircle
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTLARI ---
@@ -94,8 +95,9 @@ export default function GameCenterApp() {
   // --- 101 OKEY YEREL STATE ---
   const [okeyNewPlayer, setOkeyNewPlayer] = useState('');
   const [okeyScoreInput, setOkeyScoreInput] = useState(''); // El Puanı
-  const [okeyPenaltyInput, setOkeyPenaltyInput] = useState(''); // Ceza Puanı
+  const [okeyPenaltyInput, setOkeyPenaltyInput] = useState('101'); // Ceza Puanı (Default 101)
   const [selectedOkeyPlayerIndex, setSelectedOkeyPlayerIndex] = useState(null);
+  const [okeyModalTab, setOkeyModalTab] = useState('score'); // 'score' (El Puanı) or 'penalty' (Ceza)
 
 
   // --- 1. INITIALIZATION & AUTH ---
@@ -181,7 +183,6 @@ export default function GameCenterApp() {
       const newItems = wheelData.items.filter((_, i) => i !== idx);
       updateDb('wheelItems', newItems);
     },
-    // EKLENDİ: Toplu Silme Fonksiyonu
     clearAll: () => {
       if (window.confirm("Tüm listeyi silmek istediğine emin misin?")) {
         updateDb('wheelItems', []);
@@ -241,7 +242,7 @@ export default function GameCenterApp() {
     resetGame: () => {
       if(window.confirm("Oyun sıfırlanacak. Emin misin?")) {
         updateDb('scrabble', { active: false, finished: false, players: [] });
-        setShowScrabbleScores(false); // Yeni oyunda gizle
+        setShowScrabbleScores(false); 
       }
     },
     addPlayer: () => {
@@ -312,21 +313,37 @@ export default function GameCenterApp() {
     reset: () => {
        if(window.confirm("Oyun sıfırlanacak?")) updateDb('okey', { active: false, players: [], mode: 'single' });
     },
-    addScore: () => {
+    // GÜNCELLENEN METOD: Tek bir puan türü ekle (El Puanı veya Ceza)
+    addSingleScore: (type) => {
       if (selectedOkeyPlayerIndex === null) return;
-      const elPuani = parseInt(okeyScoreInput || 0);
-      const cezaPuani = parseInt(okeyPenaltyInput || 0);
-      const total = elPuani + cezaPuani;
       
-      if (total === 0 && !window.confirm("0 puan girmek istediğine emin misin?")) return;
+      let val = 0;
+      if (type === 'score') {
+        val = parseInt(okeyScoreInput);
+      } else {
+        val = parseInt(okeyPenaltyInput);
+      }
+
+      if (isNaN(val)) return;
+      if (val === 0 && !window.confirm("0 puan girmek istediğine emin misin?")) return;
 
       const updatedPlayers = [...okeyData.players];
-      updatedPlayers[selectedOkeyPlayerIndex].scores.push(total);
+      // Puanı listeye ekle. Ayırt etmek istersek obje olarak da tutabilirdik ama şimdilik düz toplama ve listeleme istendi.
+      updatedPlayers[selectedOkeyPlayerIndex].scores.push(val);
       
       updateDb('okey', { ...okeyData, players: updatedPlayers });
-      setOkeyScoreInput('');
-      setOkeyPenaltyInput('');
-      setSelectedOkeyPlayerIndex(null);
+      
+      // Temizlik
+      if (type === 'score') {
+        setOkeyScoreInput('');
+        // El puanı girildiğinde genelde sıra diğerine geçer, modalı kapat.
+        setSelectedOkeyPlayerIndex(null); 
+      } else {
+        // Ceza girildiğinde modal açık kalsın, belki başka ceza da vardır.
+        // Ama kullanıcı deneyimi için kapatalım, tekrar açsın.
+        // setOkeyPenaltyInput('101'); // Cezayı sıfırlama, genelde 101 kalır
+        alert("Ceza eklendi!");
+      }
     }
   };
 
@@ -707,22 +724,34 @@ export default function GameCenterApp() {
                  {okeyData.players.map((player, idx) => {
                    const totalPenalty = player.scores.reduce((a,b)=>a+b, 0);
                    return (
-                     <div key={idx} className="bg-white rounded-xl shadow border border-gray-100">
-                        <div className="bg-blue-50 p-4 text-center border-b border-blue-100">
-                           <h3 className="font-bold text-gray-800 text-lg">{player.name}</h3>
+                     <div key={idx} className="bg-white rounded-xl shadow border border-gray-100 flex flex-col h-[300px]">
+                        <div className="bg-blue-50 p-4 text-center border-b border-blue-100 flex-shrink-0">
+                           <h3 className="font-bold text-gray-800 text-lg truncate">{player.name}</h3>
                            <div className="text-3xl font-black text-blue-600 mt-1">{totalPenalty}</div>
                            <div className="text-xs text-blue-400 font-medium uppercase tracking-wider">Toplam Ceza</div>
                         </div>
-                        <div className="p-2 bg-gray-50 h-32 overflow-y-auto text-sm">
+                        
+                        <div className="p-2 bg-gray-50 overflow-y-auto flex-1 text-sm custom-scrollbar">
                            {player.scores.map((s, si) => (
-                             <div key={si} className="flex justify-between px-2 py-1 border-b border-gray-200 text-gray-600">
-                               <span>{si+1}. El</span>
-                               <span className="font-semibold">{s}</span>
+                             <div key={si} className="flex justify-between px-2 py-1.5 border-b border-gray-200 text-gray-600 last:border-0">
+                               <span className="text-xs font-mono text-gray-400">{si+1}</span>
+                               <span className={`font-semibold ${s === 101 || s === 202 ? 'text-red-500' : 'text-gray-700'}`}>
+                                 {s > 0 ? `+${s}` : s}
+                               </span>
                              </div>
                            ))}
                         </div>
-                        <button onClick={() => { setSelectedOkeyPlayerIndex(idx); setOkeyScoreInput(''); setOkeyPenaltyInput(''); }} className="w-full py-3 bg-white hover:bg-blue-50 text-blue-600 font-bold border-t transition-colors">
-                          + Ceza Ekle
+
+                        <button 
+                          onClick={() => { 
+                            setSelectedOkeyPlayerIndex(idx); 
+                            setOkeyModalTab('score'); // Varsayılan sekme
+                            setOkeyScoreInput(''); 
+                            setOkeyPenaltyInput('101'); 
+                          }} 
+                          className="w-full py-3 bg-white hover:bg-blue-50 text-blue-600 font-bold border-t transition-colors flex-shrink-0"
+                        >
+                          + Puan/Ceza Ekle
                         </button>
                      </div>
                    )
@@ -733,24 +762,77 @@ export default function GameCenterApp() {
             {/* Okey Score Input Modal */}
             {selectedOkeyPlayerIndex !== null && (
                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-                  <div className="bg-white p-6 rounded-xl w-full max-w-xs animate-bounce-in">
-                     <h3 className="font-bold text-lg mb-4 text-center">{okeyData.players[selectedOkeyPlayerIndex].name}</h3>
+                  <div className="bg-white p-6 rounded-xl w-full max-w-sm animate-bounce-in">
+                     <div className="flex justify-between items-center mb-4">
+                       <h3 className="font-bold text-lg text-gray-800 truncate pr-4">{okeyData.players[selectedOkeyPlayerIndex].name}</h3>
+                       <button onClick={()=>setSelectedOkeyPlayerIndex(null)} className="text-gray-400 hover:text-gray-600"><X/></button>
+                     </div>
                      
-                     <div className="space-y-3 mb-6">
-                       <div>
-                         <label className="text-xs font-bold text-gray-500 uppercase">El Puanı (Taşlar)</label>
-                         <input type="number" inputMode="numeric" pattern="[0-9]*" value={okeyScoreInput} onChange={e=>setOkeyScoreInput(e.target.value)} className="w-full border p-2 rounded text-lg" placeholder="0"/>
-                       </div>
-                       <div>
-                         <label className="text-xs font-bold text-red-500 uppercase">Ceza Puanı (101/202)</label>
-                         <input type="number" inputMode="numeric" pattern="[0-9]*" value={okeyPenaltyInput} onChange={e=>setOkeyPenaltyInput(e.target.value)} className="w-full border p-2 rounded text-lg border-red-200 bg-red-50" placeholder="0"/>
-                       </div>
+                     {/* Tablar */}
+                     <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
+                       <button 
+                         onClick={() => setOkeyModalTab('score')}
+                         className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${okeyModalTab === 'score' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                       >
+                         El Puanı
+                       </button>
+                       <button 
+                         onClick={() => setOkeyModalTab('penalty')}
+                         className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${okeyModalTab === 'penalty' ? 'bg-white shadow text-red-500' : 'text-gray-500 hover:text-gray-700'}`}
+                       >
+                         Ceza Ekle
+                       </button>
                      </div>
 
-                     <div className="flex gap-2">
-                        <button onClick={()=>setSelectedOkeyPlayerIndex(null)} className="flex-1 bg-gray-200 py-3 rounded-lg font-semibold">İptal</button>
-                        <button onClick={okeyMethods.addScore} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold">Ekle</button>
-                     </div>
+                     {/* İçerik */}
+                     {okeyModalTab === 'score' ? (
+                       <div className="space-y-4">
+                         <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                           <label className="text-xs font-bold text-blue-600 uppercase mb-1 block">El Sonu Puanı</label>
+                           <p className="text-xs text-blue-400 mb-2">Biten oyuncu için negatif, diğerleri için kalan taş puanını girin.</p>
+                           <div className="flex items-center gap-2">
+                             <input 
+                               type="number" 
+                               inputMode="numeric" 
+                               pattern="[0-9]*" 
+                               autoFocus
+                               value={okeyScoreInput} 
+                               onChange={e=>setOkeyScoreInput(e.target.value)} 
+                               className="w-full border-2 border-blue-200 p-3 rounded-lg text-2xl font-mono text-center focus:border-blue-500 outline-none" 
+                               placeholder="0"
+                             />
+                           </div>
+                         </div>
+                         <button onClick={() => okeyMethods.addSingleScore('score')} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 transform active:scale-95 transition-all">
+                           Puanı Kaydet
+                         </button>
+                       </div>
+                     ) : (
+                       <div className="space-y-4">
+                         <div className="bg-red-50 p-3 rounded-lg border border-red-100">
+                           <label className="text-xs font-bold text-red-500 uppercase mb-1 block">Ceza Miktarı</label>
+                           <p className="text-xs text-red-400 mb-2">Genelde 101 veya 202 eklenir.</p>
+                           
+                           <div className="flex gap-2 mb-3">
+                             <button onClick={()=>setOkeyPenaltyInput('101')} className={`flex-1 py-2 rounded border font-bold ${okeyPenaltyInput==='101' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-gray-600 border-gray-300'}`}>101</button>
+                             <button onClick={()=>setOkeyPenaltyInput('202')} className={`flex-1 py-2 rounded border font-bold ${okeyPenaltyInput==='202' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-gray-600 border-gray-300'}`}>202</button>
+                           </div>
+
+                           <input 
+                             type="number" 
+                             inputMode="numeric" 
+                             pattern="[0-9]*" 
+                             value={okeyPenaltyInput} 
+                             onChange={e=>setOkeyPenaltyInput(e.target.value)} 
+                             className="w-full border-2 border-red-200 p-3 rounded-lg text-2xl font-mono text-center focus:border-red-500 outline-none bg-white" 
+                             placeholder="Özel Tutar"
+                           />
+                         </div>
+                         <button onClick={() => okeyMethods.addSingleScore('penalty')} className="w-full bg-red-500 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-red-600 transform active:scale-95 transition-all">
+                           Cezayı Ekle
+                         </button>
+                       </div>
+                     )}
                   </div>
                </div>
             )}
@@ -760,10 +842,10 @@ export default function GameCenterApp() {
       </div>
       
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes bounceIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }

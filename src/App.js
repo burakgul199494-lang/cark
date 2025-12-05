@@ -349,7 +349,8 @@ export default function LuckyWheelApp() {
         <p className="text-gray-500 mt-2">Listenizi oluşturun ve şansınızı deneyin!</p>
       </header>
 
-      <div className="flex flex-col lg:flex-row gap-8 w-full max-w-5xl items-start justify-center">
+      {/* Flex container güncellendi: Mobilde ters (çark üstte), masaüstünde normal */}
+      <div className="flex flex-col-reverse lg:flex-row gap-8 w-full max-w-5xl items-start justify-center">
         
         {/* Sol Panel: Liste */}
         <div className="w-full lg:w-1/3 bg-white p-6 rounded-2xl shadow-xl border border-gray-100 flex flex-col h-[600px]">

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Trash2, Plus, RotateCw, Sparkles, X, LogOut, User, LogIn, AlertTriangle, 
   Settings, ClipboardPaste, Type, CheckSquare, Square,
-  Gamepad2, Calculator, Grid, Trophy, Play, RotateCcw, Save
+  Gamepad2, Calculator, Grid, Trophy, Play, RotateCcw, Save, Crown
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTLARI ---
@@ -61,6 +61,7 @@ export default function GameCenterApp() {
   
   const [scrabbleData, setScrabbleData] = useState({
     active: false,
+    finished: false, // Oyunun bitip bitmediğini takip etmek için
     players: [], // { name, scores: [], finalAdjustment: 0 }
     history: []
   });
@@ -118,7 +119,7 @@ export default function GameCenterApp() {
           settings: data.wheelSettings || { autoRemove: false }
         });
         // Scrabble Verisi
-        setScrabbleData(data.scrabble || { active: false, players: [] });
+        setScrabbleData(data.scrabble || { active: false, finished: false, players: [] });
         // Okey Verisi
         setOkeyData(data.okey || { active: false, mode: 'single', players: [] });
       } else {
@@ -179,6 +180,13 @@ export default function GameCenterApp() {
       const newItems = wheelData.items.filter((_, i) => i !== idx);
       updateDb('wheelItems', newItems);
     },
+    // EKLENDİ: Toplu Silme Fonksiyonu
+    clearAll: () => {
+      if (window.confirm("Tüm listeyi silmek istediğine emin misin?")) {
+        updateDb('wheelItems', []);
+        setWheelWinner(null);
+      }
+    },
     toggleAutoRemove: () => {
       updateDb('wheelSettings', { ...wheelData.settings, autoRemove: !wheelData.settings.autoRemove });
     },
@@ -227,11 +235,11 @@ export default function GameCenterApp() {
   const scrabbleMethods = {
     startGame: () => {
       if (scrabbleData.players.length < 2) return alert("En az 2 oyuncu ekleyin.");
-      updateDb('scrabble', { ...scrabbleData, active: true });
+      updateDb('scrabble', { ...scrabbleData, active: true, finished: false });
     },
     resetGame: () => {
       if(window.confirm("Oyun sıfırlanacak. Emin misin?")) {
-        updateDb('scrabble', { active: false, players: [] });
+        updateDb('scrabble', { active: false, finished: false, players: [] });
       }
     },
     addPlayer: () => {
@@ -249,13 +257,7 @@ export default function GameCenterApp() {
       const updatedPlayers = [...scrabbleData.players];
       const player = updatedPlayers[selectedPlayerIndex];
       
-      // SENKRON KONTROLÜ: Bu oyuncuya puan girmeden önce, diğer oyuncuların tur sayısı bu oyuncudan az olmamalı.
-      // Basit kural: Oyuncunun tur sayısı (scores.length), diğer herkesin tur sayısından en fazla 0 fazla olabilir.
-      // Eğer oyuncu zaten öndeyse (diğerlerinden fazla tur oynamışsa) durdur.
-      // Ancak buradaki kural "herkes 1. eli oynamadan kimse 2. eli oynayamaz" şeklinde istenmiş.
-      
       const currentRoundOfPlayer = player.scores.length;
-      // Diğer herhangi bir oyuncunun tur sayısı, bu oyuncunun tur sayısından az ise, demek ki o oyuncu henüz oynamamış.
       const isSomeoneBehind = updatedPlayers.some((p, idx) => idx !== selectedPlayerIndex && p.scores.length < currentRoundOfPlayer);
       
       if (isSomeoneBehind) {
@@ -270,8 +272,6 @@ export default function GameCenterApp() {
       setSelectedPlayerIndex(null);
     },
     finishGame: () => {
-      // Hesaplama: Biten (Finisher) diğerlerinin elinde kalanların toplamını alır.
-      // Diğerleri kendi ellerinde kalanları düşerler.
       if (finisherIndex === null) return alert("Lütfen oyunu bitiren kişiyi seçin.");
       
       const updatedPlayers = [...scrabbleData.players];
@@ -280,14 +280,14 @@ export default function GameCenterApp() {
       updatedPlayers.forEach((p, idx) => {
         if (idx !== finisherIndex) {
           const rem = parseInt(remainingScores[idx] || 0);
-          p.finalAdjustment = -rem; // Kendi elindekini düş
+          p.finalAdjustment = -rem; 
           sumOfOthers += rem;
         }
       });
 
-      updatedPlayers[finisherIndex].finalAdjustment = sumOfOthers; // Diğerlerinin toplamını al
+      updatedPlayers[finisherIndex].finalAdjustment = sumOfOthers; 
 
-      updateDb('scrabble', { ...scrabbleData, players: updatedPlayers, active: false, finished: true });
+      updateDb('scrabble', { ...scrabbleData, players: updatedPlayers, active: true, finished: true });
       setShowScrabbleEndModal(false);
     }
   };
@@ -298,7 +298,6 @@ export default function GameCenterApp() {
   const okeyMethods = {
     addPlayer: () => {
       if(okeyNewPlayer.trim()) {
-        // Mode 'team' ise 4 kişiye sabitleyebiliriz ama esnek bırakalım
         const newP = { name: okeyNewPlayer.trim(), scores: [] };
         updateDb('okey', { ...okeyData, players: [...okeyData.players, newP] });
         setOkeyNewPlayer('');
@@ -425,6 +424,17 @@ export default function GameCenterApp() {
                    <input value={wheelNewItem} onChange={e=>setWheelNewItem(e.target.value)} onKeyDown={e=>e.key==='Enter' && wheelMethods.addItem()} className="flex-1 border p-2 rounded" placeholder="Ekle..." />
                    <button onClick={wheelMethods.addItem} className="bg-purple-600 text-white p-2 rounded"><Plus/></button>
                  </div>
+                 
+                 {/* GERİ GELEN KISIM: Öğe Sayısı ve Toplu Silme */}
+                 <div className="flex justify-between items-center mb-2">
+                   <span className="text-sm font-semibold text-gray-500">{wheelData.items.length} Öğe</span>
+                   {wheelData.items.length > 0 && (
+                     <button onClick={wheelMethods.clearAll} className="text-xs text-red-500 hover:text-red-700 hover:underline">
+                       Tümünü Temizle
+                     </button>
+                   )}
+                 </div>
+
                  <ul className="max-h-96 overflow-y-auto">
                    {wheelData.items.map((item, idx) => (
                      <li key={idx} className="flex justify-between p-2 hover:bg-gray-50 border-b">
@@ -502,10 +512,15 @@ export default function GameCenterApp() {
           <div className="animate-fade-in">
             <div className="flex justify-between items-center mb-6">
                <button onClick={()=>setActiveTab('menu')} className="text-gray-500 hover:text-gray-800 flex items-center gap-1">← Menüye Dön</button>
-               {scrabbleData.active && <button onClick={scrabbleMethods.resetGame} className="text-red-500 text-sm hover:underline">Oyunu Sıfırla</button>}
+               {/* DÜZELTME: Oyuncu listesi varsa sıfırlama butonu her zaman görünsün */}
+               {(scrabbleData.active || scrabbleData.players.length > 0) && (
+                 <button onClick={scrabbleMethods.resetGame} className="text-red-500 text-sm hover:underline flex items-center gap-1">
+                   <RotateCcw size={14}/> Oyunu Sıfırla
+                 </button>
+               )}
             </div>
 
-            {!scrabbleData.active ? (
+            {!scrabbleData.active && !scrabbleData.finished ? (
               <div className="bg-white p-8 rounded-2xl shadow-lg max-w-lg mx-auto text-center">
                 <h2 className="text-2xl font-bold mb-4 text-green-700">Yeni Scrabble Oyunu</h2>
                 <div className="flex gap-2 mb-4">
@@ -519,15 +534,28 @@ export default function GameCenterApp() {
               </div>
             ) : (
               <div className="space-y-6">
+                {/* DÜZELTME: Oyun Bitti Bildirimi */}
+                {scrabbleData.finished && (
+                  <div className="bg-green-100 border border-green-400 text-green-800 px-4 py-3 rounded relative mb-4 text-center">
+                    <strong className="font-bold flex items-center justify-center gap-2 text-xl"><Trophy/> OYUN BİTTİ!</strong>
+                    <span className="block sm:inline"> Sonuçlar aşağıdadır. Yeni oyun için "Oyunu Sıfırla" diyebilirsiniz.</span>
+                  </div>
+                )}
+
                 {/* Scoreboard Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {scrabbleData.players.map((player, idx) => {
                     const totalScore = player.scores.reduce((a,b)=>a+b, 0) + (player.finalAdjustment || 0);
+                    // En yüksek puanı alanı bulmak için basit bir mantık (gerçek zamanlı hesaplama)
+                    const maxScore = Math.max(...scrabbleData.players.map(p => p.scores.reduce((a,b)=>a+b, 0) + (p.finalAdjustment || 0)));
+                    const isWinner = scrabbleData.finished && totalScore === maxScore;
+
                     return (
-                      <div key={idx} className="bg-white rounded-xl shadow border border-gray-100 overflow-hidden flex flex-col">
+                      <div key={idx} className={`bg-white rounded-xl shadow border overflow-hidden flex flex-col relative ${isWinner ? 'border-yellow-400 ring-4 ring-yellow-200' : 'border-gray-100'}`}>
+                        {isWinner && <div className="absolute top-0 right-0 bg-yellow-400 text-white p-1 rounded-bl-xl"><Crown size={20}/></div>}
                         <div className="bg-green-50 p-3 text-center border-b border-green-100">
                           <h3 className="font-bold text-gray-800">{player.name}</h3>
-                          <div className="text-2xl font-black text-green-600">{totalScore}</div>
+                          <div className={`text-2xl font-black ${isWinner ? 'text-yellow-600' : 'text-green-600'}`}>{totalScore}</div>
                         </div>
                         <div className="flex-1 p-3 bg-gray-50 overflow-y-auto max-h-40 text-sm space-y-1">
                           {player.scores.map((s, si) => (

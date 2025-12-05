@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trash2, Plus, RotateCw, Sparkles, X, LogOut, User, LogIn } from 'lucide-react';
+import { Trash2, Plus, RotateCw, Sparkles, X, LogOut, User, LogIn, AlertTriangle } from 'lucide-react';
 
 // --- FIREBASE IMPORTLARI ---
 import { initializeApp } from "firebase/app";
@@ -48,6 +48,9 @@ export default function LuckyWheelApp() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [authError, setAuthError] = useState('');
+  
+  // Veritabanı Hata Durumu
+  const [dbError, setDbError] = useState('');
 
   // Çark Durumları
   const [items, setItems] = useState([]);
@@ -59,14 +62,12 @@ export default function LuckyWheelApp() {
 
   // --- 1. HOOK: SADECE KULLANICI DURUMUNU TAKİP ET ---
   useEffect(() => {
-    // Firebase dinleyicisi
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
     });
 
-    // Emniyet Sübabı: Eğer Firebase 5 saniye içinde yanıt vermezse yüklemeyi zorla bitir.
-    // Bu, bağlantı yavaşsa veya alan adı izni yoksa sonsuz döngüyü engeller.
+    // Emniyet Sübabı: 5 saniye zaman aşımı
     const safetyTimer = setTimeout(() => {
       setLoading((currentLoading) => {
         if (currentLoading) {
@@ -83,53 +84,63 @@ export default function LuckyWheelApp() {
     };
   }, []);
 
-  // --- 2. HOOK: KULLANICI VARSA VERİYİ TAKİP ET (TELEFON SORUNUNU ÇÖZEN KISIM) ---
+  // --- 2. HOOK: KULLANICI VARSA VERİYİ TAKİP ET ---
   useEffect(() => {
-    // Kullanıcı yoksa listeyi boşalt ve işlem yapma
     if (!user) {
       setItems([]);
       return;
     }
 
-    // Kullanıcı varsa veritabanını dinlemeye başla
     const docRef = doc(db, "users", user.uid);
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      setDbError(''); // Başarılı okumada hatayı temizle
       if (docSnap.exists()) {
-        // Veri varsa state'e yükle
         const data = docSnap.data();
         setItems(data.items || []);
       } else {
-        // Kullanıcının verisi hiç yoksa (ilk kez giriyorsa) varsayılan oluştur
+        // Yeni kullanıcı için varsayılan veri oluştur
         const defaultItems = ['Ahmet', 'Mehmet', 'Ayşe'];
         setDoc(docRef, { 
           items: defaultItems,
           email: user.email,
           name: user.displayName || 'İsimsiz'
-        }, { merge: true }); // Merge: Varolan diğer alanları silmeden ekle
+        }, { merge: true }).catch(err => {
+          console.error("Varsayılan veri oluşturulamadı:", err);
+          if (err.code === 'permission-denied') {
+            setDbError("Veritabanı yazma izni reddedildi. Lütfen Firestore kurallarını kontrol edin.");
+          }
+        });
         setItems(defaultItems);
       }
     }, (error) => {
       console.error("Veri çekme hatası:", error);
-      // alert("Veriler yüklenirken bir hata oluştu: " + error.message); 
-      // Kullanıcıyı sürekli rahatsız etmemek için alert kapatıldı, konsola yazılıyor.
+      if (error.code === 'permission-denied') {
+        setDbError("Verilerinize erişim izniniz yok. Firestore Kuralları (Rules) ayarlarını kontrol edin.");
+      } else {
+        setDbError("Veri bağlantısı hatası: " + error.message);
+      }
     });
 
-    // Sayfadan çıkılırsa dinlemeyi durdur
     return () => unsubscribe();
-  }, [user]); // [user] bağımlılığı: User değiştiği an burası tekrar çalışır
+  }, [user]);
 
   // --- VERİTABANI GÜNCELLEME ---
   const updateDb = async (newItems) => {
-    // Önce yerel görünümü güncelle (Hız hissi için)
+    // Önce yerel görünümü güncelle
     setItems(newItems);
+    setDbError('');
     
-    // Sonra arkaplanda veritabanına yaz
+    // Sonra veritabanına yaz
     if (user) {
       try {
         await setDoc(doc(db, "users", user.uid), { items: newItems }, { merge: true });
       } catch (error) {
         console.error("Veri kaydedilemedi:", error);
-        // Hata olursa kullanıcıya bildirilebilir veya eski veri geri yüklenebilir
+        if (error.code === 'permission-denied') {
+          setDbError("Kayıt başarısız! Veritabanı izni yok. Lütfen Firestore Kurallarını güncelleyin.");
+        } else {
+          setDbError("Kayıt hatası: " + error.message);
+        }
       }
     }
   };
@@ -142,7 +153,7 @@ export default function LuckyWheelApp() {
       if (authMode === 'register') {
         const res = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(res.user, { displayName: name });
-        // İlk kayıt verisi
+        // İlk kayıt verisini oluşturmayı dene
         await setDoc(doc(db, "users", res.user.uid), { 
           items: ['Örnek 1', 'Örnek 2', 'Örnek 3'],
           email: email,
@@ -154,18 +165,10 @@ export default function LuckyWheelApp() {
     } catch (err) {
       console.error("Auth Hatası:", err);
       let message = "Bir hata oluştu: " + (err.message || err.code);
-      
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') {
-        message = "E-posta adresi veya şifre hatalı.";
-      }
-      else if (err.code === 'auth/invalid-email') message = "Geçersiz e-posta adresi formatı.";
-      else if (err.code === 'auth/user-not-found') message = "Bu e-posta ile kayıtlı kullanıcı bulunamadı.";
-      else if (err.code === 'auth/wrong-password') message = "Hatalı şifre.";
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') message = "E-posta veya şifre hatalı.";
       else if (err.code === 'auth/email-already-in-use') message = "Bu e-posta zaten kullanımda.";
       else if (err.code === 'auth/weak-password') message = "Şifre en az 6 karakter olmalı.";
-      else if (err.code === 'auth/operation-not-allowed') message = "E-posta/Şifre girişi Firebase panelinden etkinleştirilmemiş.";
-      else if (err.code === 'auth/too-many-requests') message = "Çok fazla başarısız giriş denemesi. Lütfen biraz bekleyip tekrar deneyin.";
-      
+      else if (err.code === 'permission-denied') message = "Kayıt oldunuz ancak veritabanı izni yok.";
       setAuthError(message);
     }
   };
@@ -176,7 +179,8 @@ export default function LuckyWheelApp() {
     setEmail('');
     setPassword('');
     setName('');
-    setItems([]); // Çıkış yapınca listeyi hemen temizle
+    setItems([]);
+    setDbError('');
   };
 
   // --- ÇARK FONKSİYONLARI ---
@@ -234,14 +238,12 @@ export default function LuckyWheelApp() {
     return [x, y];
   };
 
-  // --- YÜKLENİYOR EKRANI ---
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-600"></div>
     </div>
   );
 
-  // --- GİRİŞ / KAYIT EKRANI ---
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
@@ -255,8 +257,8 @@ export default function LuckyWheelApp() {
           </div>
 
           {authError && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm text-center border border-red-100">
-              {authError}
+            <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm text-center border border-red-100 flex items-center gap-2">
+              <AlertTriangle size={16} /> {authError}
             </div>
           )}
 
@@ -314,11 +316,19 @@ export default function LuckyWheelApp() {
     );
   }
 
-  // --- ANA UYGULAMA EKRANI (Giriş Yapılınca Burası Görünür) ---
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans flex flex-col items-center py-8 px-4 overflow-hidden">
       
-      {/* Üst Bar: Kullanıcı Bilgisi ve Çıkış */}
+      {/* Hata Bildirimi */}
+      {dbError && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-[60] bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded shadow-lg flex items-center gap-2">
+          <AlertTriangle size={20} />
+          <span>{dbError}</span>
+          <button onClick={() => setDbError('')}><X size={16}/></button>
+        </div>
+      )}
+
+      {/* Üst Bar */}
       <div className="absolute top-4 right-4 flex items-center gap-4 bg-white px-4 py-2 rounded-full shadow-sm border border-gray-200 z-50">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-bold">
@@ -341,7 +351,7 @@ export default function LuckyWheelApp() {
 
       <div className="flex flex-col lg:flex-row gap-8 w-full max-w-5xl items-start justify-center">
         
-        {/* Sol Panel: Liste İşlemleri */}
+        {/* Sol Panel: Liste */}
         <div className="w-full lg:w-1/3 bg-white p-6 rounded-2xl shadow-xl border border-gray-100 flex flex-col h-[600px]">
           <div className="flex gap-2 mb-4">
             <input

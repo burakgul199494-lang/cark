@@ -258,6 +258,7 @@ export default function GameCenterApp() {
 
       const updatedPlayers = [...scrabbleData.players];
       const player = updatedPlayers[selectedPlayerIndex];
+      
       const currentRoundOfPlayer = player.scores.length;
       const isSomeoneBehind = updatedPlayers.some((p, idx) => idx !== selectedPlayerIndex && p.scores.length < currentRoundOfPlayer);
       
@@ -307,8 +308,10 @@ export default function GameCenterApp() {
     reset: () => {
        if(window.confirm("Oyun sıfırlanacak?")) updateDb('okey', { active: false, players: [], mode: 'single' });
     },
+    // GÜNCELLENEN METOD: Tek bir puan türü ekle (El Puanı veya Ceza)
     addSingleScore: (type) => {
       if (selectedOkeyPlayerIndex === null) return;
+      
       let val = 0;
       if (type === 'score') {
         val = parseInt(okeyScoreInput);
@@ -320,17 +323,21 @@ export default function GameCenterApp() {
       if (val === 0 && !window.confirm("0 puan girmek istediğine emin misin?")) return;
 
       const updatedPlayers = [...okeyData.players];
+      
       if (type === 'score') {
+        // El puanı
         updatedPlayers[selectedOkeyPlayerIndex].scores.push(val);
         setOkeyScoreInput('');
         setSelectedOkeyPlayerIndex(null); 
       } else {
+        // Ceza puanı - ayrı diziye
         if (!updatedPlayers[selectedOkeyPlayerIndex].penalties) updatedPlayers[selectedOkeyPlayerIndex].penalties = [];
         updatedPlayers[selectedOkeyPlayerIndex].penalties.push(val);
+        // Cezayı ekledikten sonra pencereyi kapat, alert verme
         setOkeyPenaltyInput(''); 
-        alert("Ceza eklendi!");
         setSelectedOkeyPlayerIndex(null);
       }
+      
       updateDb('okey', { ...okeyData, players: updatedPlayers });
     },
     // EKLENEN: Puan/Ceza Düzenleme
@@ -462,6 +469,8 @@ export default function GameCenterApp() {
                    <input value={wheelNewItem} onChange={e=>setWheelNewItem(e.target.value)} onKeyDown={e=>e.key==='Enter' && wheelMethods.addItem()} className="flex-1 border p-2 rounded" placeholder="Ekle..." />
                    <button onClick={wheelMethods.addItem} className="bg-purple-600 text-white p-2 rounded"><Plus/></button>
                  </div>
+                 
+                 {/* GERİ GELEN KISIM: Öğe Sayısı ve Toplu Silme */}
                  <div className="flex justify-between items-center mb-2">
                    <span className="text-sm font-semibold text-gray-500">{wheelData.items.length} Öğe</span>
                    {wheelData.items.length > 0 && (
@@ -470,6 +479,7 @@ export default function GameCenterApp() {
                      </button>
                    )}
                  </div>
+
                  <ul className="max-h-96 overflow-y-auto">
                    {wheelData.items.map((item, idx) => (
                      <li key={idx} className="flex justify-between p-2 hover:bg-gray-50 border-b">

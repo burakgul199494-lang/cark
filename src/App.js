@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trash2, Plus, RotateCw, Sparkles, X, LogOut, User, LogIn, AlertTriangle } from 'lucide-react';
+import { 
+  Trash2, Plus, RotateCw, Sparkles, X, LogOut, User, LogIn, AlertTriangle, 
+  Settings, ClipboardPaste, Type, CheckSquare, Square 
+} from 'lucide-react';
 
 // --- FIREBASE IMPORTLARI ---
 import { initializeApp } from "firebase/app";
@@ -37,11 +40,14 @@ const db = getFirestore(app);
 // --- RENKLER ---
 const COLORS = ['#EF476F', '#FFD166', '#06D6A0', '#118AB2', '#073B4C', '#9D4EDD', '#FF9F1C', '#4CC9F0'];
 
+// --- TÜRK ALFABESİ ---
+const TR_ALPHABET = "A B C Ç D E F G Ğ H I İ J K L M N O Ö P R S Ş T U Ü V Y Z".split(' ');
+
 export default function LuckyWheelApp() {
   // Kullanıcı ve Uygulama Durumları
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [authMode, setAuthMode] = useState('login'); // 'login' veya 'register'
+  const [authMode, setAuthMode] = useState('login'); 
   
   // Auth Form Durumları
   const [email, setEmail] = useState('');
@@ -60,6 +66,11 @@ export default function LuckyWheelApp() {
   const [winner, setWinner] = useState(null);
   const currentRotation = useRef(0);
 
+  // Yeni Özellik Durumları
+  const [autoRemove, setAutoRemove] = useState(false); // Kazananı otomatik silme modu
+  const [showBulkModal, setShowBulkModal] = useState(false); // Toplu ekleme modalı
+  const [bulkText, setBulkText] = useState(''); // Toplu ekleme metni
+
   // --- 1. HOOK: SADECE KULLANICI DURUMUNU TAKİP ET ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -67,7 +78,6 @@ export default function LuckyWheelApp() {
       setLoading(false);
     });
 
-    // Emniyet Sübabı: 5 saniye zaman aşımı
     const safetyTimer = setTimeout(() => {
       setLoading((currentLoading) => {
         if (currentLoading) {
@@ -93,22 +103,23 @@ export default function LuckyWheelApp() {
 
     const docRef = doc(db, "users", user.uid);
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
-      setDbError(''); // Başarılı okumada hatayı temizle
+      setDbError('');
       if (docSnap.exists()) {
         const data = docSnap.data();
         setItems(data.items || []);
+        // Ayarları da çek (Varsayılan false)
+        if (data.settings) {
+          setAutoRemove(data.settings.autoRemove || false);
+        }
       } else {
-        // Yeni kullanıcı için varsayılan veri oluştur
         const defaultItems = ['Ahmet', 'Mehmet', 'Ayşe'];
         setDoc(docRef, { 
           items: defaultItems,
           email: user.email,
-          name: user.displayName || 'İsimsiz'
+          name: user.displayName || 'İsimsiz',
+          settings: { autoRemove: false }
         }, { merge: true }).catch(err => {
-          console.error("Varsayılan veri oluşturulamadı:", err);
-          if (err.code === 'permission-denied') {
-            setDbError("Veritabanı yazma izni reddedildi. Lütfen Firestore kurallarını kontrol edin.");
-          }
+          console.error("Varsayılan veri hatası:", err);
         });
         setItems(defaultItems);
       }
@@ -124,22 +135,25 @@ export default function LuckyWheelApp() {
     return () => unsubscribe();
   }, [user]);
 
-  // --- VERİTABANI GÜNCELLEME ---
-  const updateDb = async (newItems) => {
-    // Önce yerel görünümü güncelle
-    setItems(newItems);
+  // --- VERİTABANI GÜNCELLEME (LİSTE VE AYARLAR) ---
+  const updateDb = async (newItems, newSettings = null) => {
+    // Yerel güncelleme
+    if (newItems !== null) setItems(newItems);
+    if (newSettings !== null) setAutoRemove(newSettings.autoRemove);
+    
     setDbError('');
     
-    // Sonra veritabanına yaz
     if (user) {
       try {
-        await setDoc(doc(db, "users", user.uid), { items: newItems }, { merge: true });
+        const payload = {};
+        if (newItems !== null) payload.items = newItems;
+        if (newSettings !== null) payload.settings = newSettings;
+
+        await setDoc(doc(db, "users", user.uid), payload, { merge: true });
       } catch (error) {
         console.error("Veri kaydedilemedi:", error);
         if (error.code === 'permission-denied') {
-          setDbError("Kayıt başarısız! Veritabanı izni yok. Lütfen Firestore Kurallarını güncelleyin.");
-        } else {
-          setDbError("Kayıt hatası: " + error.message);
+          setDbError("Kayıt başarısız! Veritabanı izni yok.");
         }
       }
     }
@@ -153,11 +167,11 @@ export default function LuckyWheelApp() {
       if (authMode === 'register') {
         const res = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(res.user, { displayName: name });
-        // İlk kayıt verisini oluşturmayı dene
         await setDoc(doc(db, "users", res.user.uid), { 
           items: ['Örnek 1', 'Örnek 2', 'Örnek 3'],
           email: email,
-          name: name
+          name: name,
+          settings: { autoRemove: false }
         });
       } else {
         await signInWithEmailAndPassword(auth, email, password);
@@ -165,10 +179,9 @@ export default function LuckyWheelApp() {
     } catch (err) {
       console.error("Auth Hatası:", err);
       let message = "Bir hata oluştu: " + (err.message || err.code);
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') message = "E-posta veya şifre hatalı.";
+      if (err.code === 'auth/invalid-credential') message = "E-posta veya şifre hatalı.";
       else if (err.code === 'auth/email-already-in-use') message = "Bu e-posta zaten kullanımda.";
       else if (err.code === 'auth/weak-password') message = "Şifre en az 6 karakter olmalı.";
-      else if (err.code === 'permission-denied') message = "Kayıt oldunuz ancak veritabanı izni yok.";
       setAuthError(message);
     }
   };
@@ -183,7 +196,7 @@ export default function LuckyWheelApp() {
     setDbError('');
   };
 
-  // --- ÇARK FONKSİYONLARI ---
+  // --- LİSTE İŞLEMLERİ ---
   const handleAddItem = () => {
     if (newItem.trim()) {
       const updated = [...items, newItem.trim()];
@@ -198,10 +211,45 @@ export default function LuckyWheelApp() {
   };
 
   const handleClearList = () => {
-    updateDb([]);
-    setWinner(null);
+    if (window.confirm("Tüm listeyi silmek istediğine emin misin?")) {
+      updateDb([]);
+      setWinner(null);
+    }
   };
 
+  // --- YENİ ÖZELLİK FONKSİYONLARI ---
+  
+  // Türk Alfabesini Yükle
+  const loadTrAlphabet = () => {
+    if (window.confirm("Mevcut liste silinecek ve Türk Alfabesi yüklenecek. Onaylıyor musun?")) {
+      updateDb(TR_ALPHABET);
+    }
+  };
+
+  // Ayar Değiştirme (Auto Remove)
+  const toggleAutoRemove = () => {
+    updateDb(null, { autoRemove: !autoRemove });
+  };
+
+  // Toplu Veri Ekleme
+  const handleBulkImport = () => {
+    if (!bulkText.trim()) return;
+    
+    // Satır satır böl ve boşlukları temizle
+    const newLines = bulkText.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+    
+    if (newLines.length > 0) {
+      // Mevcut listeye ekle (Append)
+      const updated = [...items, ...newLines];
+      updateDb(updated);
+      setBulkText('');
+      setShowBulkModal(false);
+    }
+  };
+
+  // --- ÇARK FONKSİYONLARI ---
   const spinWheel = () => {
     if (isSpinning || items.length === 0) return;
     setIsSpinning(true);
@@ -230,6 +278,19 @@ export default function LuckyWheelApp() {
     if (winningIndex >= 0 && winningIndex < items.length) {
       setWinner(items[winningIndex]);
     }
+  };
+
+  // Kazanan Modalındaki "Tamam" butonu
+  const handleWinnerConfirm = () => {
+    if (autoRemove && winner) {
+      // Kazanan öğeyi bul ve sil
+      // Not: items içinde aynı isimden birden fazla varsa sadece ilkini sileriz
+      const winnerIndex = items.findIndex(item => item === winner);
+      if (winnerIndex !== -1) {
+        handleDeleteItem(winnerIndex);
+      }
+    }
+    setWinner(null);
   };
 
   const getCoordinatesForPercent = (percent) => {
@@ -349,11 +410,43 @@ export default function LuckyWheelApp() {
         <p className="text-gray-500 mt-2">Listenizi oluşturun ve şansınızı deneyin!</p>
       </header>
 
-      {/* Flex container güncellendi: Mobilde ters (çark üstte), masaüstünde normal */}
+      {/* Ana Kapsayıcı */}
       <div className="flex flex-col-reverse lg:flex-row gap-8 w-full max-w-5xl items-start justify-center">
         
-        {/* Sol Panel: Liste */}
+        {/* SOL PANEL: Liste ve Araçlar */}
         <div className="w-full lg:w-1/3 bg-white p-6 rounded-2xl shadow-xl border border-gray-100 flex flex-col h-[600px]">
+          
+          {/* Araçlar ve Ayarlar Bölümü */}
+          <div className="flex gap-2 mb-4 pb-4 border-b border-gray-100 overflow-x-auto">
+             <button 
+                onClick={loadTrAlphabet}
+                title="Türk Alfabesini Yükle"
+                className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1 text-xs font-semibold whitespace-nowrap"
+             >
+               <Type size={16} /> TR Alfabe
+             </button>
+             <button 
+                onClick={() => setShowBulkModal(true)}
+                title="Toplu Veri Ekle"
+                className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1 text-xs font-semibold whitespace-nowrap"
+             >
+               <ClipboardPaste size={16} /> Toplu Ekle
+             </button>
+             
+             {/* Otomatik Silme Ayarı Toggle */}
+             <button 
+                onClick={toggleAutoRemove}
+                title={autoRemove ? "Kazananı Sil: AÇIK" : "Kazananı Sil: KAPALI"}
+                className={`p-2 rounded-lg transition-colors flex items-center gap-1 text-xs font-semibold whitespace-nowrap
+                  ${autoRemove ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}
+                `}
+             >
+                {autoRemove ? <CheckSquare size={16} /> : <Square size={16} />}
+                {autoRemove ? 'Silme Açık' : 'Silme Kapalı'}
+             </button>
+          </div>
+
+          {/* Ekleme Inputu */}
           <div className="flex gap-2 mb-4">
             <input
               type="text"
@@ -397,7 +490,7 @@ export default function LuckyWheelApp() {
           </ul>
         </div>
 
-        {/* Sağ Panel: Çark */}
+        {/* SAĞ PANEL: Çark */}
         <div className="w-full lg:w-2/3 flex flex-col items-center justify-center relative">
           <div className="relative w-[320px] h-[320px] sm:w-[450px] sm:h-[450px]">
             <div className="absolute top-1/2 -right-6 -mt-4 z-20 w-0 h-0 border-t-[16px] border-t-transparent border-b-[16px] border-b-transparent border-r-[30px] border-r-gray-800 transform rotate-180 drop-shadow-lg"></div>
@@ -452,21 +545,72 @@ export default function LuckyWheelApp() {
         </div>
       </div>
 
+      {/* MODAL: KAZANAN */}
       {winner && !isSpinning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center relative animate-bounce-in">
              <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-yellow-400 p-4 rounded-full shadow-lg border-4 border-white">
                 <span className="text-4xl">👑</span>
              </div>
-             <button onClick={() => setWinner(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20} /></button>
+             
              <h2 className="mt-8 text-2xl font-bold text-gray-800">Kazanan!</h2>
              <div className="my-6 py-4 px-6 bg-purple-50 rounded-xl border border-purple-100">
                 <p className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 break-words">{winner}</p>
              </div>
-             <button onClick={() => setWinner(null)} className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-gray-800 transition-colors">Tamam</button>
+             
+             {autoRemove && (
+                <p className="text-red-500 text-xs mb-4 font-semibold">
+                   *Bu öğe listeden otomatik olarak silinecek.
+                </p>
+             )}
+
+             <button onClick={handleWinnerConfirm} className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-gray-800 transition-colors">Tamam</button>
           </div>
         </div>
       )}
+
+      {/* MODAL: TOPLU VERİ EKLEME */}
+      {showBulkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full relative animate-bounce-in">
+             <button onClick={() => setShowBulkModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20} /></button>
+             
+             <div className="flex items-center gap-3 mb-4">
+               <div className="bg-blue-100 p-2 rounded-full">
+                 <ClipboardPaste className="text-blue-600" size={24} />
+               </div>
+               <h2 className="text-xl font-bold text-gray-800">Toplu Veri Ekle</h2>
+             </div>
+
+             <p className="text-sm text-gray-500 mb-4">
+               Excel'den veya başka bir yerden verilerinizi kopyalayıp buraya yapıştırın. Her satır bir öğe olarak eklenecektir.
+             </p>
+
+             <textarea
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                placeholder="Örnek:&#10;Elma&#10;Armut&#10;Kiraz..."
+                className="w-full h-40 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 font-mono text-sm resize-none"
+             ></textarea>
+
+             <div className="flex gap-3">
+               <button 
+                  onClick={() => setShowBulkModal(false)}
+                  className="flex-1 py-3 text-gray-600 font-semibold hover:bg-gray-100 rounded-xl transition-colors"
+               >
+                 İptal
+               </button>
+               <button 
+                  onClick={handleBulkImport}
+                  className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+               >
+                 Ekle
+               </button>
+             </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }

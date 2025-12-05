@@ -57,45 +57,66 @@ export default function LuckyWheelApp() {
   const [winner, setWinner] = useState(null);
   const currentRotation = useRef(0);
 
-  // --- 1. KULLANICI OTURUMUNU DİNLEME ---
+  // --- 1. HOOK: SADECE KULLANICI DURUMUNU TAKİP ET ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (currentUser) {
-        // Kullanıcı giriş yaptıysa verilerini dinlemeye başla
-        const docRef = doc(db, "users", currentUser.uid);
-        const unsubDb = onSnapshot(docRef, (docSnap) => {
-          if (docSnap.exists()) {
-            setItems(docSnap.data().items || []);
-          } else {
-            // Yeni kullanıcıysa varsayılan veri oluştur
-            const defaultItems = ['Ahmet', 'Mehmet', 'Ayşe'];
-            setDoc(docRef, { items: defaultItems });
-            setItems(defaultItems);
-          }
-        });
-        return () => unsubDb();
-      } else {
-        setItems([]);
-      }
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // --- 2. VERİTABANI GÜNCELLEME ---
+  // --- 2. HOOK: KULLANICI VARSA VERİYİ TAKİP ET (TELEFON SORUNUNU ÇÖZEN KISIM) ---
+  useEffect(() => {
+    // Kullanıcı yoksa listeyi boşalt ve işlem yapma
+    if (!user) {
+      setItems([]);
+      return;
+    }
+
+    // Kullanıcı varsa veritabanını dinlemeye başla
+    const docRef = doc(db, "users", user.uid);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        // Veri varsa state'e yükle
+        const data = docSnap.data();
+        setItems(data.items || []);
+      } else {
+        // Kullanıcının verisi hiç yoksa (ilk kez giriyorsa) varsayılan oluştur
+        const defaultItems = ['Ahmet', 'Mehmet', 'Ayşe'];
+        setDoc(docRef, { 
+          items: defaultItems,
+          email: user.email,
+          name: user.displayName || 'İsimsiz'
+        }, { merge: true }); // Merge: Varolan diğer alanları silmeden ekle
+        setItems(defaultItems);
+      }
+    }, (error) => {
+      console.error("Veri çekme hatası:", error);
+      alert("Veriler yüklenirken bir hata oluştu: " + error.message);
+    });
+
+    // Sayfadan çıkılırsa dinlemeyi durdur
+    return () => unsubscribe();
+  }, [user]); // [user] bağımlılığı: User değiştiği an burası tekrar çalışır
+
+  // --- VERİTABANI GÜNCELLEME ---
   const updateDb = async (newItems) => {
+    // Önce yerel görünümü güncelle (Hız hissi için)
+    setItems(newItems);
+    
+    // Sonra arkaplanda veritabanına yaz
     if (user) {
       try {
         await setDoc(doc(db, "users", user.uid), { items: newItems }, { merge: true });
       } catch (error) {
         console.error("Veri kaydedilemedi:", error);
+        // Hata olursa kullanıcıya bildirilebilir veya eski veri geri yüklenebilir
       }
     }
-    setItems(newItems); // Yerel state'i de güncelle ki anlık görünsün
   };
 
-  // --- 3. AUTH İŞLEMLERİ ---
+  // --- AUTH İŞLEMLERİ ---
   const handleAuth = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -113,12 +134,20 @@ export default function LuckyWheelApp() {
         await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (err) {
-      let message = "Bir hata oluştu.";
-      if (err.code === 'auth/invalid-email') message = "Geçersiz e-posta adresi.";
-      if (err.code === 'auth/user-not-found') message = "Kullanıcı bulunamadı.";
-      if (err.code === 'auth/wrong-password') message = "Hatalı şifre.";
-      if (err.code === 'auth/email-already-in-use') message = "Bu e-posta zaten kullanımda.";
-      if (err.code === 'auth/weak-password') message = "Şifre en az 6 karakter olmalı.";
+      console.error("Auth Hatası:", err);
+      let message = "Bir hata oluştu: " + (err.message || err.code);
+      
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') {
+        message = "E-posta adresi veya şifre hatalı.";
+      }
+      else if (err.code === 'auth/invalid-email') message = "Geçersiz e-posta adresi formatı.";
+      else if (err.code === 'auth/user-not-found') message = "Bu e-posta ile kayıtlı kullanıcı bulunamadı.";
+      else if (err.code === 'auth/wrong-password') message = "Hatalı şifre.";
+      else if (err.code === 'auth/email-already-in-use') message = "Bu e-posta zaten kullanımda.";
+      else if (err.code === 'auth/weak-password') message = "Şifre en az 6 karakter olmalı.";
+      else if (err.code === 'auth/operation-not-allowed') message = "E-posta/Şifre girişi Firebase panelinden etkinleştirilmemiş.";
+      else if (err.code === 'auth/too-many-requests') message = "Çok fazla başarısız giriş denemesi. Lütfen biraz bekleyip tekrar deneyin.";
+      
       setAuthError(message);
     }
   };
@@ -129,9 +158,10 @@ export default function LuckyWheelApp() {
     setEmail('');
     setPassword('');
     setName('');
+    setItems([]); // Çıkış yapınca listeyi hemen temizle
   };
 
-  // --- 4. ÇARK FONKSİYONLARI ---
+  // --- ÇARK FONKSİYONLARI ---
   const handleAddItem = () => {
     if (newItem.trim()) {
       const updated = [...items, newItem.trim()];

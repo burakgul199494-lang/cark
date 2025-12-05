@@ -608,6 +608,8 @@ export default function GameCenterApp() {
                        <h3 className="font-bold text-lg mb-2">{scrabbleData.players[selectedPlayerIndex].name} - Puan Gir</h3>
                        <input 
                          type="number" 
+                         inputMode="numeric" 
+                         pattern="[0-9]*" 
                          autoFocus
                          value={scrabbleScoreInput} 
                          onChange={e=>setScrabbleScoreInput(e.target.value)} 
@@ -653,6 +655,8 @@ export default function GameCenterApp() {
                                    <span className="font-medium text-gray-700">{p.name}</span>
                                    <input 
                                      type="number" 
+                                     inputMode="numeric" 
+                                     pattern="[0-9]*" 
                                      className="border p-2 rounded w-24 text-center"
                                      placeholder="Kalan"
                                      onChange={(e) => setRemainingScores({...remainingScores, [idx]: e.target.value})}
@@ -735,11 +739,11 @@ export default function GameCenterApp() {
                      <div className="space-y-3 mb-6">
                        <div>
                          <label className="text-xs font-bold text-gray-500 uppercase">El Puanı (Taşlar)</label>
-                         <input type="number" value={okeyScoreInput} onChange={e=>setOkeyScoreInput(e.target.value)} className="w-full border p-2 rounded text-lg" placeholder="0"/>
+                         <input type="number" inputMode="numeric" pattern="[0-9]*" value={okeyScoreInput} onChange={e=>setOkeyScoreInput(e.target.value)} className="w-full border p-2 rounded text-lg" placeholder="0"/>
                        </div>
                        <div>
                          <label className="text-xs font-bold text-red-500 uppercase">Ceza Puanı (101/202)</label>
-                         <input type="number" value={okeyPenaltyInput} onChange={e=>setOkeyPenaltyInput(e.target.value)} className="w-full border p-2 rounded text-lg border-red-200 bg-red-50" placeholder="0"/>
+                         <input type="number" inputMode="numeric" pattern="[0-9]*" value={okeyPenaltyInput} onChange={e=>setOkeyPenaltyInput(e.target.value)} className="w-full border p-2 rounded text-lg border-red-200 bg-red-50" placeholder="0"/>
                        </div>
                      </div>
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Trash2, Plus, RotateCw, Sparkles, X, LogOut, User, LogIn, AlertTriangle, 
   Settings, ClipboardPaste, Type, CheckSquare, Square,
-  Gamepad2, Calculator, Grid, Trophy, Play, RotateCcw, Save, Crown
+  Gamepad2, Calculator, Grid, Trophy, Play, RotateCcw, Save, Crown, Eye, EyeOff
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTLARI ---
@@ -89,6 +89,7 @@ export default function GameCenterApp() {
   const [showScrabbleEndModal, setShowScrabbleEndModal] = useState(false);
   const [finisherIndex, setFinisherIndex] = useState(null);
   const [remainingScores, setRemainingScores] = useState({}); // { playerIndex: score }
+  const [showScrabbleScores, setShowScrabbleScores] = useState(false); // Puanları Göster/Gizle
 
   // --- 101 OKEY YEREL STATE ---
   const [okeyNewPlayer, setOkeyNewPlayer] = useState('');
@@ -240,6 +241,7 @@ export default function GameCenterApp() {
     resetGame: () => {
       if(window.confirm("Oyun sıfırlanacak. Emin misin?")) {
         updateDb('scrabble', { active: false, finished: false, players: [] });
+        setShowScrabbleScores(false); // Yeni oyunda gizle
       }
     },
     addPlayer: () => {
@@ -512,12 +514,23 @@ export default function GameCenterApp() {
           <div className="animate-fade-in">
             <div className="flex justify-between items-center mb-6">
                <button onClick={()=>setActiveTab('menu')} className="text-gray-500 hover:text-gray-800 flex items-center gap-1">← Menüye Dön</button>
-               {/* DÜZELTME: Oyuncu listesi varsa sıfırlama butonu her zaman görünsün */}
-               {(scrabbleData.active || scrabbleData.players.length > 0) && (
-                 <button onClick={scrabbleMethods.resetGame} className="text-red-500 text-sm hover:underline flex items-center gap-1">
-                   <RotateCcw size={14}/> Oyunu Sıfırla
-                 </button>
-               )}
+               
+               <div className="flex gap-3">
+                   {/* Gizle/Göster Butonu */}
+                   {(scrabbleData.active || scrabbleData.players.length > 0) && !scrabbleData.finished && (
+                     <button onClick={() => setShowScrabbleScores(!showScrabbleScores)} className="text-indigo-600 text-sm hover:underline flex items-center gap-1">
+                       {showScrabbleScores ? <EyeOff size={14}/> : <Eye size={14}/>}
+                       {showScrabbleScores ? 'Gizle' : 'Puanları Göster'}
+                     </button>
+                   )}
+
+                   {/* Sıfırlama Butonu */}
+                   {(scrabbleData.active || scrabbleData.players.length > 0) && (
+                     <button onClick={scrabbleMethods.resetGame} className="text-red-500 text-sm hover:underline flex items-center gap-1">
+                       <RotateCcw size={14}/> Oyunu Sıfırla
+                     </button>
+                   )}
+               </div>
             </div>
 
             {!scrabbleData.active && !scrabbleData.finished ? (
@@ -549,13 +562,14 @@ export default function GameCenterApp() {
                     // En yüksek puanı alanı bulmak için basit bir mantık (gerçek zamanlı hesaplama)
                     const maxScore = Math.max(...scrabbleData.players.map(p => p.scores.reduce((a,b)=>a+b, 0) + (p.finalAdjustment || 0)));
                     const isWinner = scrabbleData.finished && totalScore === maxScore;
+                    const displayScore = (scrabbleData.finished || showScrabbleScores) ? totalScore : '???';
 
                     return (
                       <div key={idx} className={`bg-white rounded-xl shadow border overflow-hidden flex flex-col relative ${isWinner ? 'border-yellow-400 ring-4 ring-yellow-200' : 'border-gray-100'}`}>
                         {isWinner && <div className="absolute top-0 right-0 bg-yellow-400 text-white p-1 rounded-bl-xl"><Crown size={20}/></div>}
                         <div className="bg-green-50 p-3 text-center border-b border-green-100">
                           <h3 className="font-bold text-gray-800">{player.name}</h3>
-                          <div className={`text-2xl font-black ${isWinner ? 'text-yellow-600' : 'text-green-600'}`}>{totalScore}</div>
+                          <div className={`text-2xl font-black ${isWinner ? 'text-yellow-600' : 'text-green-600'}`}>{displayScore}</div>
                         </div>
                         <div className="flex-1 p-3 bg-gray-50 overflow-y-auto max-h-40 text-sm space-y-1">
                           {player.scores.map((s, si) => (

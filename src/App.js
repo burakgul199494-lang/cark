@@ -59,11 +59,28 @@ export default function LuckyWheelApp() {
 
   // --- 1. HOOK: SADECE KULLANICI DURUMUNU TAKİP ET ---
   useEffect(() => {
+    // Firebase dinleyicisi
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
     });
-    return () => unsubscribe();
+
+    // Emniyet Sübabı: Eğer Firebase 5 saniye içinde yanıt vermezse yüklemeyi zorla bitir.
+    // Bu, bağlantı yavaşsa veya alan adı izni yoksa sonsuz döngüyü engeller.
+    const safetyTimer = setTimeout(() => {
+      setLoading((currentLoading) => {
+        if (currentLoading) {
+          console.warn("Firebase bağlantısı zaman aşımına uğradı, yükleme manuel durduruldu.");
+          return false;
+        }
+        return currentLoading;
+      });
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      clearTimeout(safetyTimer);
+    };
   }, []);
 
   // --- 2. HOOK: KULLANICI VARSA VERİYİ TAKİP ET (TELEFON SORUNUNU ÇÖZEN KISIM) ---
@@ -93,7 +110,8 @@ export default function LuckyWheelApp() {
       }
     }, (error) => {
       console.error("Veri çekme hatası:", error);
-      alert("Veriler yüklenirken bir hata oluştu: " + error.message);
+      // alert("Veriler yüklenirken bir hata oluştu: " + error.message); 
+      // Kullanıcıyı sürekli rahatsız etmemek için alert kapatıldı, konsola yazılıyor.
     });
 
     // Sayfadan çıkılırsa dinlemeyi durdur

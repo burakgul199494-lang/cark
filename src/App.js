@@ -3,7 +3,7 @@ import {
   Trash2, Plus, RotateCw, Sparkles, X, LogOut, User, LogIn, AlertTriangle, 
   Settings, ClipboardPaste, Type, CheckSquare, Square,
   Gamepad2, Calculator, Grid, Trophy, Play, RotateCcw, Save, Crown, Eye, EyeOff,
-  AlertCircle, Minus, PlusCircle, Edit2
+  AlertCircle, Minus, PlusCircle, Edit2, ArrowUp, ArrowDown, SkipForward, RefreshCw
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTLARI ---
@@ -63,7 +63,7 @@ export default function GameCenterApp() {
   const [scrabbleData, setScrabbleData] = useState({
     active: false,
     finished: false, 
-    players: [], 
+    players: [], // { name, scores: [{val:0, label:'HD'}], finalAdjustment: 0 }
     history: []
   });
 
@@ -91,6 +91,7 @@ export default function GameCenterApp() {
   const [finisherIndex, setFinisherIndex] = useState(null);
   const [remainingScores, setRemainingScores] = useState({}); 
   const [showScrabbleScores, setShowScrabbleScores] = useState(false); 
+  const [editingScrabbleScore, setEditingScrabbleScore] = useState(null); // { playerIdx, scoreIdx, val, label }
 
   // --- 101 OKEY YEREL STATE ---
   const [okeyNewPlayer, setOkeyNewPlayer] = useState('');
@@ -98,9 +99,7 @@ export default function GameCenterApp() {
   const [okeyPenaltyInput, setOkeyPenaltyInput] = useState(''); 
   const [selectedOkeyPlayerIndex, setSelectedOkeyPlayerIndex] = useState(null);
   const [okeyModalTab, setOkeyModalTab] = useState('score'); 
-  
-  // Okey Düzenleme State'i
-  const [editingOkeyItem, setEditingOkeyItem] = useState(null); // { playerIndex, type: 'score'|'penalty', index, value }
+  const [editingOkeyItem, setEditingOkeyItem] = useState(null);
 
 
   // --- 1. INITIALIZATION & AUTH ---
@@ -251,27 +250,63 @@ export default function GameCenterApp() {
         setScrabbleNewPlayer('');
       }
     },
-    addScore: () => {
-      if (selectedPlayerIndex === null || !scrabbleScoreInput) return;
-      const score = parseInt(scrabbleScoreInput);
-      if (isNaN(score)) return;
+    movePlayer: (idx, direction) => {
+      const players = [...scrabbleData.players];
+      if (direction === 'up' && idx > 0) {
+        [players[idx], players[idx-1]] = [players[idx-1], players[idx]];
+      } else if (direction === 'down' && idx < players.length - 1) {
+        [players[idx], players[idx+1]] = [players[idx+1], players[idx]];
+      }
+      updateDb('scrabble', { ...scrabbleData, players });
+    },
+    addScore: (type) => {
+      // type: 'normal', 'HD', 'Pas'
+      if (selectedPlayerIndex === null) return;
+      
+      let val = 0;
+      let label = "";
 
-      const updatedPlayers = [...scrabbleData.players];
-      const player = updatedPlayers[selectedPlayerIndex];
-      
-      const currentRoundOfPlayer = player.scores.length;
-      const isSomeoneBehind = updatedPlayers.some((p, idx) => idx !== selectedPlayerIndex && p.scores.length < currentRoundOfPlayer);
-      
-      if (isSomeoneBehind) {
-        const behindPlayer = updatedPlayers.find((p, idx) => idx !== selectedPlayerIndex && p.scores.length < currentRoundOfPlayer);
-        alert(`Sıra bekleniyor! Önce ${behindPlayer.name} oyuncusunun ${currentRoundOfPlayer + 1}. el puanını girmelisiniz.`);
-        return;
+      if (type === 'normal') {
+        if (!scrabbleScoreInput) return;
+        val = parseInt(scrabbleScoreInput);
+        if (isNaN(val)) return;
+        label = val.toString();
+      } else if (type === 'HD') {
+        val = 0;
+        label = "HD";
+      } else if (type === 'Pas') {
+        val = 0;
+        label = "Pas";
       }
 
-      player.scores.push(score);
+      const updatedPlayers = [...scrabbleData.players];
+      updatedPlayers[selectedPlayerIndex].scores.push({ val, label });
+      
       updateDb('scrabble', { ...scrabbleData, players: updatedPlayers });
       setScrabbleScoreInput('');
       setSelectedPlayerIndex(null);
+    },
+    updateScore: (val, label) => {
+      if (!editingScrabbleScore) return;
+      const { playerIdx, scoreIdx } = editingScrabbleScore;
+      const updatedPlayers = [...scrabbleData.players];
+      
+      updatedPlayers[playerIdx].scores[scoreIdx] = { 
+        val: parseInt(val), 
+        label: label 
+      };
+      
+      updateDb('scrabble', { ...scrabbleData, players: updatedPlayers });
+      setEditingScrabbleScore(null);
+    },
+    deleteScore: () => {
+      if (!editingScrabbleScore) return;
+      if (!window.confirm("Bu eli silmek istediğine emin misin?")) return;
+      const { playerIdx, scoreIdx } = editingScrabbleScore;
+      const updatedPlayers = [...scrabbleData.players];
+      updatedPlayers[playerIdx].scores.splice(scoreIdx, 1);
+      updateDb('scrabble', { ...scrabbleData, players: updatedPlayers });
+      setEditingScrabbleScore(null);
     },
     finishGame: () => {
       if (finisherIndex === null) return alert("Lütfen oyunu bitiren kişiyi seçin.");
@@ -308,7 +343,6 @@ export default function GameCenterApp() {
     reset: () => {
        if(window.confirm("Oyun sıfırlanacak?")) updateDb('okey', { active: false, players: [], mode: 'single' });
     },
-    // GÜNCELLENEN METOD: Tek bir puan türü ekle (El Puanı veya Ceza)
     addSingleScore: (type) => {
       if (selectedOkeyPlayerIndex === null) return;
       
@@ -323,28 +357,22 @@ export default function GameCenterApp() {
       if (val === 0 && !window.confirm("0 puan girmek istediğine emin misin?")) return;
 
       const updatedPlayers = [...okeyData.players];
-      
       if (type === 'score') {
-        // El puanı
         updatedPlayers[selectedOkeyPlayerIndex].scores.push(val);
         setOkeyScoreInput('');
         setSelectedOkeyPlayerIndex(null); 
       } else {
-        // Ceza puanı - ayrı diziye
         if (!updatedPlayers[selectedOkeyPlayerIndex].penalties) updatedPlayers[selectedOkeyPlayerIndex].penalties = [];
         updatedPlayers[selectedOkeyPlayerIndex].penalties.push(val);
-        // Cezayı ekledikten sonra pencereyi kapat, alert verme
         setOkeyPenaltyInput(''); 
         setSelectedOkeyPlayerIndex(null);
       }
-      
       updateDb('okey', { ...okeyData, players: updatedPlayers });
     },
-    // EKLENEN: Puan/Ceza Düzenleme
     startEditing: (playerIdx, type, itemIdx, val) => {
       setEditingOkeyItem({
         playerIndex: playerIdx,
-        type: type, // 'score' or 'penalty'
+        type: type, 
         index: itemIdx,
         value: val
       });
@@ -469,8 +497,6 @@ export default function GameCenterApp() {
                    <input value={wheelNewItem} onChange={e=>setWheelNewItem(e.target.value)} onKeyDown={e=>e.key==='Enter' && wheelMethods.addItem()} className="flex-1 border p-2 rounded" placeholder="Ekle..." />
                    <button onClick={wheelMethods.addItem} className="bg-purple-600 text-white p-2 rounded"><Plus/></button>
                  </div>
-                 
-                 {/* GERİ GELEN KISIM: Öğe Sayısı ve Toplu Silme */}
                  <div className="flex justify-between items-center mb-2">
                    <span className="text-sm font-semibold text-gray-500">{wheelData.items.length} Öğe</span>
                    {wheelData.items.length > 0 && (
@@ -479,7 +505,6 @@ export default function GameCenterApp() {
                      </button>
                    )}
                  </div>
-
                  <ul className="max-h-96 overflow-y-auto">
                    {wheelData.items.map((item, idx) => (
                      <li key={idx} className="flex justify-between p-2 hover:bg-gray-50 border-b">
@@ -576,9 +601,32 @@ export default function GameCenterApp() {
                   <input value={scrabbleNewPlayer} onChange={e=>setScrabbleNewPlayer(e.target.value)} className="flex-1 border p-3 rounded-lg" placeholder="Oyuncu İsmi..." />
                   <button onClick={scrabbleMethods.addPlayer} className="bg-green-600 text-white p-3 rounded-lg"><Plus/></button>
                 </div>
-                <div className="flex flex-wrap gap-2 justify-center mb-6">
-                  {scrabbleData.players.map((p,i) => <span key={i} className="bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">{p.name}</span>)}
+                
+                {/* OYUNCU SIRALAMA LİSTESİ */}
+                <div className="mb-6 space-y-2">
+                  {scrabbleData.players.map((p,i) => (
+                    <div key={i} className="flex items-center justify-between bg-gray-50 p-2 rounded-lg border border-gray-200">
+                      <span className="font-semibold text-gray-700 px-2">{i+1}. {p.name}</span>
+                      <div className="flex gap-1">
+                        <button 
+                          onClick={() => scrabbleMethods.movePlayer(i, 'up')} 
+                          disabled={i === 0}
+                          className="p-1 hover:bg-gray-200 rounded disabled:opacity-30"
+                        >
+                          <ArrowUp size={16}/>
+                        </button>
+                        <button 
+                          onClick={() => scrabbleMethods.movePlayer(i, 'down')} 
+                          disabled={i === scrabbleData.players.length - 1}
+                          className="p-1 hover:bg-gray-200 rounded disabled:opacity-30"
+                        >
+                          <ArrowDown size={16}/>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+
                 <button onClick={scrabbleMethods.startGame} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold shadow-md hover:bg-green-700">Oyunu Başlat</button>
               </div>
             ) : (
@@ -589,41 +637,70 @@ export default function GameCenterApp() {
                     <span className="block sm:inline"> Sonuçlar aşağıdadır. Yeni oyun için "Oyunu Sıfırla" diyebilirsiniz.</span>
                   </div>
                 )}
+                
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {scrabbleData.players.map((player, idx) => {
-                    const totalScore = player.scores.reduce((a,b)=>a+b, 0) + (player.finalAdjustment || 0);
-                    const maxScore = Math.max(...scrabbleData.players.map(p => p.scores.reduce((a,b)=>a+b, 0) + (p.finalAdjustment || 0)));
+                    // Skor Hesaplama (Obje yapısına göre güncelleme)
+                    const totalScore = player.scores.reduce((acc, curr) => acc + (typeof curr === 'object' ? curr.val : curr), 0) + (player.finalAdjustment || 0);
+                    const maxScore = Math.max(...scrabbleData.players.map(p => p.scores.reduce((a,b)=>a+(typeof b==='object'?b.val:b), 0) + (p.finalAdjustment || 0)));
                     const isWinner = scrabbleData.finished && totalScore === maxScore;
                     const displayScore = (scrabbleData.finished || showScrabbleScores) ? totalScore : '???';
 
+                    // Sıra Kimde Hesabı
+                    const totalMoves = scrabbleData.players.reduce((acc, p) => acc + p.scores.length, 0);
+                    const nextPlayerIdx = totalMoves % scrabbleData.players.length;
+                    const isMyTurn = !scrabbleData.finished && idx === nextPlayerIdx;
+
                     return (
-                      <div key={idx} className={`bg-white rounded-xl shadow border overflow-hidden flex flex-col relative ${isWinner ? 'border-yellow-400 ring-4 ring-yellow-200' : 'border-gray-100'}`}>
+                      <div key={idx} className={`bg-white rounded-xl shadow border overflow-hidden flex flex-col relative transition-all duration-300 ${isWinner ? 'border-yellow-400 ring-4 ring-yellow-200' : (isMyTurn ? 'border-green-500 ring-4 ring-green-100 scale-105 z-10' : 'border-gray-100 opacity-90')}`}>
                         {isWinner && <div className="absolute top-0 right-0 bg-yellow-400 text-white p-1 rounded-bl-xl"><Crown size={20}/></div>}
-                        <div className="bg-green-50 p-3 text-center border-b border-green-100">
-                          <h3 className="font-bold text-gray-800">{player.name}</h3>
+                        {isMyTurn && <div className="absolute top-0 left-0 bg-green-500 text-white px-2 py-0.5 text-xs font-bold rounded-br-lg">SIRA SENDE</div>}
+                        
+                        <div className={`p-3 text-center border-b ${isMyTurn ? 'bg-green-100 border-green-200' : 'bg-gray-50 border-gray-100'}`}>
+                          <h3 className="font-bold text-gray-800 truncate">{player.name}</h3>
                           <div className={`text-2xl font-black ${isWinner ? 'text-yellow-600' : 'text-green-600'}`}>{displayScore}</div>
                         </div>
-                        <div className="flex-1 p-3 bg-gray-50 overflow-y-auto max-h-40 text-sm space-y-1">
-                          {player.scores.map((s, si) => (
-                             <div key={si} className="flex justify-between text-gray-500 border-b border-gray-200 pb-1">
-                               <span>{si+1}. El</span> <span>{s}</span>
-                             </div>
-                          ))}
+                        
+                        <div className="flex-1 p-3 bg-gray-50 overflow-y-auto max-h-60 text-sm space-y-1 custom-scrollbar">
+                          {player.scores.map((s, si) => {
+                             const val = typeof s === 'object' ? s.val : s;
+                             const label = typeof s === 'object' ? s.label : s;
+                             return (
+                               <div 
+                                 key={si} 
+                                 onClick={() => !scrabbleData.finished && setEditingScrabbleScore({ playerIdx: idx, scoreIdx: si, val: val, label: label })}
+                                 className="flex justify-between text-gray-600 border-b border-gray-200 pb-1 cursor-pointer hover:bg-gray-100 px-1 rounded"
+                               >
+                                 <span className="text-xs text-gray-400">{si+1}.</span> 
+                                 <span className="font-semibold">{label}</span>
+                               </div>
+                             );
+                          })}
                           {player.finalAdjustment !== 0 && (
                             <div className="flex justify-between text-indigo-600 font-bold border-t border-gray-200 pt-1 mt-1">
                               <span>Sonuç</span> <span>{player.finalAdjustment > 0 ? `+${player.finalAdjustment}` : player.finalAdjustment}</span>
                             </div>
                           )}
                         </div>
+                        
                         {!scrabbleData.finished && (
-                           <button onClick={() => { setSelectedPlayerIndex(idx); setScrabbleScoreInput(''); }} className="w-full py-3 bg-white hover:bg-green-50 text-green-600 font-bold text-sm border-t transition-colors">
-                             + Puan Ekle
+                           <button 
+                             disabled={!isMyTurn}
+                             onClick={() => { setSelectedPlayerIndex(idx); setScrabbleScoreInput(''); }} 
+                             className={`w-full py-3 font-bold text-sm border-t transition-colors
+                               ${isMyTurn 
+                                 ? 'bg-green-600 text-white hover:bg-green-700 shadow-inner' 
+                                 : 'bg-gray-100 text-gray-400 cursor-not-allowed'}
+                             `}
+                           >
+                             {isMyTurn ? '+ Puan Ekle' : 'Sıra Bekleniyor'}
                            </button>
                         )}
                       </div>
                     )
                   })}
                 </div>
+
                 {!scrabbleData.finished && (
                   <div className="flex justify-center mt-8">
                     <button onClick={() => setShowScrabbleEndModal(true)} className="bg-gray-800 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:bg-black">
@@ -632,28 +709,73 @@ export default function GameCenterApp() {
                   </div>
                 )}
                 
+                {/* Scrabble Add Score Modal */}
                 {selectedPlayerIndex !== null && (
                   <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-xl w-full max-w-xs animate-bounce-in">
-                       <h3 className="font-bold text-lg mb-2">{scrabbleData.players[selectedPlayerIndex].name} - Puan Gir</h3>
-                       <input 
-                         type="number" 
-                         inputMode="numeric" 
-                         pattern="[0-9]*" 
-                         autoFocus
-                         value={scrabbleScoreInput} 
-                         onChange={e=>setScrabbleScoreInput(e.target.value)} 
-                         className="w-full border p-3 rounded-lg text-lg mb-4" 
-                         placeholder="0"
-                       />
+                       <h3 className="font-bold text-lg mb-4 text-center">{scrabbleData.players[selectedPlayerIndex].name}</h3>
+                       
+                       <div className="grid grid-cols-2 gap-2 mb-4">
+                         <button onClick={() => scrabbleMethods.addScore('HD')} className="bg-orange-100 text-orange-600 py-2 rounded-lg font-bold hover:bg-orange-200 flex items-center justify-center gap-1 text-sm"><RefreshCw size={14}/> HD</button>
+                         <button onClick={() => scrabbleMethods.addScore('Pas')} className="bg-gray-200 text-gray-600 py-2 rounded-lg font-bold hover:bg-gray-300 flex items-center justify-center gap-1 text-sm"><SkipForward size={14}/> PAS</button>
+                       </div>
+
+                       <div className="relative mb-4">
+                         <input 
+                           type="number" 
+                           inputMode="numeric" 
+                           pattern="[0-9]*" 
+                           autoFocus
+                           value={scrabbleScoreInput} 
+                           onChange={e=>setScrabbleScoreInput(e.target.value)} 
+                           className="w-full border-2 border-green-500 p-3 rounded-lg text-2xl font-mono text-center focus:outline-none" 
+                           placeholder="0"
+                         />
+                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-bold">PUAN</span>
+                       </div>
+
                        <div className="flex gap-2">
-                         <button onClick={()=>setSelectedPlayerIndex(null)} className="flex-1 bg-gray-200 py-3 rounded-lg font-semibold">İptal</button>
-                         <button onClick={scrabbleMethods.addScore} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-semibold">Kaydet</button>
+                         <button onClick={()=>setSelectedPlayerIndex(null)} className="flex-1 bg-gray-100 py-3 rounded-lg font-semibold hover:bg-gray-200">İptal</button>
+                         <button onClick={() => scrabbleMethods.addScore('normal')} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 shadow-lg">Kaydet</button>
                        </div>
                     </div>
                   </div>
                 )}
 
+                {/* Scrabble Edit Modal */}
+                {editingScrabbleScore && (
+                  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-xl w-full max-w-xs animate-bounce-in">
+                       <h3 className="font-bold text-lg mb-4 text-center">Puanı Düzenle</h3>
+                       
+                       <div className="grid grid-cols-2 gap-2 mb-4">
+                         <button onClick={() => scrabbleMethods.updateScore(0, 'HD')} className={`py-2 rounded-lg font-bold text-sm border ${editingScrabbleScore.label === 'HD' ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-orange-500 border-orange-200'}`}>HD Yap</button>
+                         <button onClick={() => scrabbleMethods.updateScore(0, 'Pas')} className={`py-2 rounded-lg font-bold text-sm border ${editingScrabbleScore.label === 'Pas' ? 'bg-gray-500 text-white border-gray-500' : 'bg-white text-gray-500 border-gray-300'}`}>PAS Yap</button>
+                       </div>
+
+                       <input 
+                         type="number" 
+                         inputMode="numeric"
+                         pattern="[0-9]*"
+                         className="w-full border-2 p-3 rounded-lg text-2xl font-mono text-center mb-4 focus:border-green-500 outline-none"
+                         value={editingScrabbleScore.val}
+                         onChange={(e) => setEditingScrabbleScore({...editingScrabbleScore, val: e.target.value, label: e.target.value})}
+                       />
+
+                       <div className="flex gap-2">
+                         <button onClick={scrabbleMethods.deleteScore} className="flex-1 bg-red-100 text-red-600 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-red-200">
+                           <Trash2 size={18}/> Sil
+                         </button>
+                         <button onClick={() => scrabbleMethods.updateScore(editingScrabbleScore.val, editingScrabbleScore.label)} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700">
+                           Güncelle
+                         </button>
+                       </div>
+                       <button onClick={() => setEditingScrabbleScore(null)} className="w-full mt-3 text-gray-400 text-sm hover:text-gray-600">İptal</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* End Game Modal */}
                 {showScrabbleEndModal && (
                   <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 overflow-y-auto py-10">
                     <div className="bg-white p-6 rounded-xl w-full max-w-md relative">

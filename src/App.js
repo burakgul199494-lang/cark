@@ -3,15 +3,15 @@ import { Gamepad2, RotateCw, Grid, Calculator, LogOut, AlertTriangle, X } from '
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile } from "firebase/auth";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
 
-// --- YENİ EKLENENLER (ROUTING) ---
+// --- ROUTER ---
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 
+// --- DOSYA BAĞLANTILARI (HEPSİ YAN YANA) ---
 import { auth, db } from './firebase';
-import WheelGame from './components/WheelGame';
-import ScrabbleGame from './components/ScrabbleGame';
-import OkeyGame from './components/OkeyGame';
+import WheelGame from './WheelGame';       // ./components/ YOK, direkt dosya adı
+import ScrabbleGame from './ScrabbleGame'; // ./components/ YOK
+import OkeyGame from './OkeyGame';         // ./components/ YOK
 
-// --- ANA UYGULAMA BİLEŞENİ ---
 export default function App() {
   return (
     <Router>
@@ -24,10 +24,8 @@ function GameContent() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  // Router kancaları (hooks)
   const navigate = useNavigate(); 
-  const location = useLocation();
-
+  
   // Auth State
   const [authMode, setAuthMode] = useState('login');
   const [email, setEmail] = useState('');
@@ -43,7 +41,7 @@ function GameContent() {
     okey: { active: false, players: [] }
   });
 
-  // --- AUTH & DATA LISTENER ---
+  // --- AUTH LISTENER ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -52,6 +50,7 @@ function GameContent() {
     return () => unsubscribe();
   }, []);
 
+  // --- DATA LISTENER ---
   useEffect(() => {
     if (!user) return;
     const docRef = doc(db, "users", user.uid);
@@ -59,10 +58,7 @@ function GameContent() {
       if (docSnap.exists()) {
         setUserData({ ...userData, ...docSnap.data() });
       } else {
-        setDoc(docRef, { 
-          wheelItems: ['Ahmet', 'Mehmet'], 
-          email: user.email 
-        }, { merge: true });
+        setDoc(docRef, { wheelItems: [], email: user.email }, { merge: true });
       }
     });
     return () => unsub();
@@ -73,7 +69,7 @@ function GameContent() {
     try {
       await setDoc(doc(db, "users", user.uid), { [field]: data }, { merge: true });
     } catch (err) {
-      setError("Kaydetme hatası: " + err.message);
+      setError("Hata: " + err.message);
     }
   };
 
@@ -91,9 +87,9 @@ function GameContent() {
     }
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center"><div className="animate-spin h-10 w-10 border-4 border-indigo-600 rounded-full border-t-transparent"></div></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-indigo-600 rounded-full border-t-transparent"></div></div>;
 
-  // --- GİRİŞ EKRANI (Login) ---
+  // --- GİRİŞ EKRANI ---
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -114,10 +110,9 @@ function GameContent() {
     );
   }
 
-  // --- ANA ROUTING YAPISI ---
+  // --- OYUN ALANI ---
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-800 pb-20">
-      {/* Navbar */}
       <div className="bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-40">
         <Link to="/" className="flex items-center gap-2 cursor-pointer no-underline text-gray-800">
           <Gamepad2 className="text-indigo-600" />
@@ -137,71 +132,29 @@ function GameContent() {
 
       <div className="max-w-6xl mx-auto p-4 mt-6">
         <Routes>
-          {/* ANASAYFA (MENÜ) */}
           <Route path="/" element={
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Link to="/wheel" className="no-underline">
-                <MenuCard 
-                  title="Şans Çarkı" 
-                  desc="İsim çekilişi yap." 
-                  icon={<RotateCw size={40} className="text-purple-600"/>} 
-                  color="border-purple-500" 
-                  bg="bg-purple-100"
-                />
+                <MenuCard title="Şans Çarkı" desc="İsim çekilişi yap." icon={<RotateCw size={40} className="text-purple-600"/>} color="border-purple-500" bg="bg-purple-100" />
               </Link>
               <Link to="/scrabble" className="no-underline">
-                <MenuCard 
-                  title="Scrabble" 
-                  desc="Puan hesaplama." 
-                  icon={<Grid size={40} className="text-green-600"/>} 
-                  color="border-green-500" 
-                  bg="bg-green-100"
-                />
+                <MenuCard title="Scrabble" desc="Puan hesaplama." icon={<Grid size={40} className="text-green-600"/>} color="border-green-500" bg="bg-green-100" />
               </Link>
               <Link to="/okey" className="no-underline">
-                <MenuCard 
-                  title="101 Okey" 
-                  desc="Ceza takibi." 
-                  icon={<Calculator size={40} className="text-blue-600"/>} 
-                  color="border-blue-500" 
-                  bg="bg-blue-100"
-                />
+                <MenuCard title="101 Okey" desc="Ceza takibi." icon={<Calculator size={40} className="text-blue-600"/>} color="border-blue-500" bg="bg-blue-100" />
               </Link>
             </div>
           } />
 
-          {/* OYUN SAYFALARI */}
-          <Route path="/wheel" element={
-            <WheelGame 
-              data={userData.wheelItems} 
-              settings={userData.wheelSettings} 
-              onUpdate={updateDb} 
-              onBack={() => navigate('/')} 
-            />
-          } />
-          
-          <Route path="/scrabble" element={
-            <ScrabbleGame 
-              data={userData.scrabble} 
-              onUpdate={updateDb} 
-              onBack={() => navigate('/')} 
-            />
-          } />
-
-          <Route path="/okey" element={
-            <OkeyGame 
-              data={userData.okey} 
-              onUpdate={updateDb} 
-              onBack={() => navigate('/')} 
-            />
-          } />
+          <Route path="/wheel" element={<WheelGame data={userData.wheelItems} settings={userData.wheelSettings} onUpdate={updateDb} onBack={() => navigate('/')} />} />
+          <Route path="/scrabble" element={<ScrabbleGame data={userData.scrabble} onUpdate={updateDb} onBack={() => navigate('/')} />} />
+          <Route path="/okey" element={<OkeyGame data={userData.okey} onUpdate={updateDb} onBack={() => navigate('/')} />} />
         </Routes>
       </div>
     </div>
   );
 }
 
-// Basit Kart Bileşeni
 function MenuCard({ title, desc, icon, color, bg }) {
   return (
     <div className={`bg-white p-8 rounded-2xl shadow-md hover:shadow-xl transition-all cursor-pointer border-t-4 ${color} flex flex-col items-center gap-4 group h-full`}>

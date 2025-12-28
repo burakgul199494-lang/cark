@@ -7,12 +7,13 @@ import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react
 // --- DOSYA BAĞLANTILARI ---
 import { auth, db } from './firebase';
 
-// DİKKAT: Burası güncellendi (Artık AnaSayfa.js dosyasını çağırıyoruz)
+// AnaSayfa src klasöründe olduğu için böyle kalacak (Doğru)
 import AnaSayfa from './AnaSayfa'; 
 
-import WheelGame from './WheelGame';
-import ScrabbleGame from './ScrabbleGame';
-import OkeyGame from './OkeyGame';
+// DİKKAT: Oyunlar components klasöründe olduğu için yolları düzelttik:
+import WheelGame from './components/WheelGame';
+import ScrabbleGame from './components/ScrabbleGame';
+import OkeyGame from './components/OkeyGame';
 
 export default function App() {
   return (
@@ -135,7 +136,7 @@ function GameContent() {
       {/* Sayfa İçerikleri */}
       <div className="max-w-6xl mx-auto p-4 mt-6">
         <Routes>
-          {/* Anasayfa Rotası - GÜNCELLENDİ */}
+          {/* Anasayfa Rotası */}
           <Route path="/" element={<AnaSayfa />} />
 
           {/* Oyunlar */}

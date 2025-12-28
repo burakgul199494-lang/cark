@@ -7,13 +7,12 @@ import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react
 // --- DOSYA BAĞLANTILARI ---
 import { auth, db } from './firebase';
 
-// AnaSayfa src klasöründe olduğu için böyle kalacak (Doğru)
 import AnaSayfa from './AnaSayfa'; 
 
-// DİKKAT: Oyunlar components klasöründe olduğu için yolları düzelttik:
+// Oyunlar ve Yeni Modül (components klasöründen)
 import WheelGame from './components/WheelGame';
 import ScrabbleGame from './components/ScrabbleGame';
-import OkeyGame from './components/OkeyGame';
+import ShipmentApp from './components/ShipmentApp'; // <-- YENİ DOSYAMIZ
 
 export default function App() {
   return (
@@ -35,12 +34,12 @@ function GameContent() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
 
-  // Oyun Verileri
+  // Veriler
   const [userData, setUserData] = useState({
     wheelItems: [],
     wheelSettings: { autoRemove: false },
-    scrabble: { active: false, players: [] },
-    okey: { active: false, players: [] }
+    scrabble: { active: false, players: [] }
+    // Okey verisine artık ihtiyacımız yok
   });
 
   // --- AUTH DİNLEYİCİ ---
@@ -96,7 +95,7 @@ function GameContent() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-           <h1 className="text-2xl font-bold text-center mb-6 text-indigo-800">Oyun Merkezi</h1>
+           <h1 className="text-2xl font-bold text-center mb-6 text-indigo-800">İş Yönetim Paneli</h1>
            {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{error}</div>}
            <form onSubmit={handleAuth} className="space-y-4">
              {authMode === 'register' && <input type="text" placeholder="Adınız" className="w-full p-3 border rounded-lg" onChange={e=>setName(e.target.value)} />}
@@ -119,7 +118,7 @@ function GameContent() {
       <div className="bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-40">
         <Link to="/" className="flex items-center gap-2 cursor-pointer no-underline text-gray-800">
           <Gamepad2 className="text-indigo-600" />
-          <span className="font-bold text-lg hidden sm:block">Oyun Merkezi</span>
+          <span className="font-bold text-lg hidden sm:block">Yönetim Paneli</span>
         </Link>
         <div className="flex items-center gap-4">
           <span className="text-sm font-medium">{user.displayName}</span>
@@ -142,7 +141,9 @@ function GameContent() {
           {/* Oyunlar */}
           <Route path="/wheel" element={<WheelGame data={userData.wheelItems} settings={userData.wheelSettings} onUpdate={updateDb} onBack={() => navigate('/')} />} />
           <Route path="/scrabble" element={<ScrabbleGame data={userData.scrabble} onUpdate={updateDb} onBack={() => navigate('/')} />} />
-          <Route path="/okey" element={<OkeyGame data={userData.okey} onUpdate={updateDb} onBack={() => navigate('/')} />} />
+          
+          {/* YENİ SEVKİYAT ROTASI */}
+          <Route path="/sevkiyat" element={<ShipmentApp onBack={() => navigate('/')} />} />
         </Routes>
       </div>
     </div>

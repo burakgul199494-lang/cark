@@ -1,10 +1,22 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { RotateCw, Grid, Calculator } from 'lucide-react';
+import { RotateCw, Grid, Truck } from 'lucide-react'; // Truck ikonunu ekledik, Calculator'ı kaldırdık
 
-export default function Home() {
+export default function AnaSayfa() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
+      
+      {/* Sevkiyat Kartı (En başa aldık) */}
+      <Link to="/sevkiyat" className="no-underline">
+        <MenuCard 
+          title="Sevkiyat Planla" 
+          desc="Stok ve ciro bazlı hesaplama." 
+          icon={<Truck size={40} className="text-blue-600"/>} 
+          color="border-blue-500" 
+          bg="bg-blue-100" 
+        />
+      </Link>
+
       {/* Şans Çarkı Kartı */}
       <Link to="/wheel" className="no-underline">
         <MenuCard 
@@ -24,17 +36,6 @@ export default function Home() {
           icon={<Grid size={40} className="text-green-600"/>} 
           color="border-green-500" 
           bg="bg-green-100" 
-        />
-      </Link>
-
-      {/* 101 Okey Kartı */}
-      <Link to="/okey" className="no-underline">
-        <MenuCard 
-          title="101 Okey" 
-          desc="Ceza takibi." 
-          icon={<Calculator size={40} className="text-blue-600"/>} 
-          color="border-blue-500" 
-          bg="bg-blue-100" 
         />
       </Link>
     </div>

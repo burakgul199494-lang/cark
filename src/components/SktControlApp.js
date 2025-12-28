@@ -5,10 +5,27 @@ import { ArrowLeft, Calendar, AlertTriangle, CheckCircle, Save, RotateCcw } from
 // shelfLife: Raf ömrü (gün)
 // startDelay: Sevkiyattan kaç gün sonra kullanıma başlanıyor (0: Aynı gün, 1: Ertesi gün)
 const PRODUCT_DEFINITIONS = [
-  { id: 1, name: "Mozeralla Peyniri", shelfLife: 6, startDelay: 1 },
-  { id: 2, name: "Hamburger Ekmeği", shelfLife: 14, startDelay: 0 },
-  { id: 3, name: "Sandviç Ekmeği", shelfLife: 10, startDelay: 0 },
-  { id: 4, name: "Taze Sos", shelfLife: 4, startDelay: 1 },
+  { id: 1, name: "Ekmek", shelfLife: 14, startDelay: 0 },
+  { id: 2, name: "Tahıllı Fileto", shelfLife: 12, startDelay: 0 },
+  { id: 3, name: "Köfte", shelfLife: 10, startDelay: 0 },
+  { id: 4, name: "İçli Köfte", shelfLife: 10, startDelay: 0 },
+  { id: 5, name: "Mozeralla", shelfLife: 6, startDelay: 1 },
+  { id: 6, name: "Ç.Mozeralla", shelfLife: 8, startDelay: 0 },
+  { id: 7, name: '13" Taban', shelfLife: 8, startDelay: 0 },
+  { id: 8, name: '10" Taban', shelfLife: 8, startDelay: 0 },
+  { id: 9, name: "Sufle", shelfLife: 7, startDelay: 0 },
+  { id: 10, name: "Çıtır Tavuk", shelfLife: 7, startDelay: 0 },
+  { id: 11, name: "Kickers", shelfLife: 7, startDelay: 0 },
+  { id: 12, name: "Finger", shelfLife: 7, startDelay: 0 },
+  { id: 13, name: "Domates", shelfLife: 5, startDelay: 0 },
+  { id: 14, name: "Patetes", shelfLife: 5, startDelay: 0 },
+  { id: 15, name: "Yeşil Biber", shelfLife: 5, startDelay: 0 },
+  { id: 16, name: "Mantar", shelfLife: 5, startDelay: 0 },
+  { id: 17, name: "Soğan", shelfLife: 5, startDelay: 0 },
+  { id: 18, name: '7" Hamur', shelfLife: 5, startDelay: 1 },
+  { id: 19, name: '10" Hamur', shelfLife: 5, startDelay: 1 },
+  { id: 20, name: '13" Hamur', shelfLife: 5, startDelay: 1 },
+  { id: 21, name: "Pan Hamur", shelfLife: 5, startDelay: 1 },
 ];
 
 export default function SktControlApp({ onBack }) {

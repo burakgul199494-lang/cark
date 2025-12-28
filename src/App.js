@@ -8,11 +8,10 @@ import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react
 import { auth, db } from './firebase';
 
 import AnaSayfa from './AnaSayfa'; 
-
-// Oyunlar ve Yeni Modül (components klasöründen)
 import WheelGame from './components/WheelGame';
 import ScrabbleGame from './components/ScrabbleGame';
-import ShipmentApp from './components/ShipmentApp'; // <-- YENİ DOSYAMIZ
+import ShipmentApp from './components/ShipmentApp';
+import SktControlApp from './components/SktControlApp'; // <-- YENİ MODÜL
 
 export default function App() {
   return (
@@ -34,12 +33,11 @@ function GameContent() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
 
-  // Veriler
+  // Veriler (SKT kontrolü genelde anlık olduğu için veritabanına kaydetmedim, local çalışır)
   const [userData, setUserData] = useState({
     wheelItems: [],
     wheelSettings: { autoRemove: false },
     scrabble: { active: false, players: [] }
-    // Okey verisine artık ihtiyacımız yok
   });
 
   // --- AUTH DİNLEYİCİ ---
@@ -111,10 +109,8 @@ function GameContent() {
     );
   }
 
-  // --- ANA UYGULAMA İSKELETİ ---
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-800 pb-20">
-      {/* Üst Menü (Navbar) */}
       <div className="bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-40">
         <Link to="/" className="flex items-center gap-2 cursor-pointer no-underline text-gray-800">
           <Gamepad2 className="text-indigo-600" />
@@ -132,18 +128,14 @@ function GameContent() {
         </div>
       )}
 
-      {/* Sayfa İçerikleri */}
       <div className="max-w-6xl mx-auto p-4 mt-6">
         <Routes>
-          {/* Anasayfa Rotası */}
           <Route path="/" element={<AnaSayfa />} />
-
-          {/* Oyunlar */}
           <Route path="/wheel" element={<WheelGame data={userData.wheelItems} settings={userData.wheelSettings} onUpdate={updateDb} onBack={() => navigate('/')} />} />
           <Route path="/scrabble" element={<ScrabbleGame data={userData.scrabble} onUpdate={updateDb} onBack={() => navigate('/')} />} />
-          
-          {/* YENİ SEVKİYAT ROTASI */}
           <Route path="/sevkiyat" element={<ShipmentApp onBack={() => navigate('/')} />} />
+          {/* YENİ SKT ROTASI */}
+          <Route path="/skt-kontrol" element={<SktControlApp onBack={() => navigate('/')} />} />
         </Routes>
       </div>
     </div>

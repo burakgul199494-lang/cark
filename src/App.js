@@ -3,17 +3,31 @@ import { Gamepad2, RotateCw, Grid, Calculator, LogOut, AlertTriangle, X } from '
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile } from "firebase/auth";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
 
-// Yeni oluşturduğumuz dosyaları import ediyoruz
+// --- YENİ EKLENENLER (ROUTING) ---
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
+
 import { auth, db } from './firebase';
 import WheelGame from './components/WheelGame';
 import ScrabbleGame from './components/ScrabbleGame';
 import OkeyGame from './components/OkeyGame';
 
-export default function GameCenterApp() {
+// --- ANA UYGULAMA BİLEŞENİ ---
+export default function App() {
+  return (
+    <Router>
+      <GameContent />
+    </Router>
+  );
+}
+
+function GameContent() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('menu'); 
   
+  // Router kancaları (hooks)
+  const navigate = useNavigate(); 
+  const location = useLocation();
+
   // Auth State
   const [authMode, setAuthMode] = useState('login');
   const [email, setEmail] = useState('');
@@ -45,7 +59,6 @@ export default function GameCenterApp() {
       if (docSnap.exists()) {
         setUserData({ ...userData, ...docSnap.data() });
       } else {
-        // Yeni kullanıcı için başlangıç verisi
         setDoc(docRef, { 
           wheelItems: ['Ahmet', 'Mehmet'], 
           email: user.email 
@@ -55,8 +68,6 @@ export default function GameCenterApp() {
     return () => unsub();
   }, [user]);
 
-  // --- GENEL GÜNCELLEME FONKSİYONU ---
-  // Bu fonksiyonu çocuk bileşenlere prop olarak göndereceğiz
   const updateDb = async (field, data) => {
     if (!user) return;
     try {
@@ -82,7 +93,7 @@ export default function GameCenterApp() {
 
   if (loading) return <div className="h-screen flex items-center justify-center"><div className="animate-spin h-10 w-10 border-4 border-indigo-600 rounded-full border-t-transparent"></div></div>;
 
-  // --- GİRİŞ EKRANI ---
+  // --- GİRİŞ EKRANI (Login) ---
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -103,15 +114,15 @@ export default function GameCenterApp() {
     );
   }
 
-  // --- ANA EKRAN ---
+  // --- ANA ROUTING YAPISI ---
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-800 pb-20">
       {/* Navbar */}
       <div className="bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-40">
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('menu')}>
+        <Link to="/" className="flex items-center gap-2 cursor-pointer no-underline text-gray-800">
           <Gamepad2 className="text-indigo-600" />
           <span className="font-bold text-lg hidden sm:block">Oyun Merkezi</span>
-        </div>
+        </Link>
         <div className="flex items-center gap-4">
           <span className="text-sm font-medium">{user.displayName}</span>
           <LogOut size={20} className="text-gray-400 cursor-pointer hover:text-red-500" onClick={()=>signOut(auth)}/>
@@ -125,77 +136,75 @@ export default function GameCenterApp() {
       )}
 
       <div className="max-w-6xl mx-auto p-4 mt-6">
-        {/* MENÜ SAYFASI */}
-        {activeTab === 'menu' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <MenuCard 
-               title="Şans Çarkı" 
-               desc="İsim çekilişi yap." 
-               icon={<RotateCw size={40} className="text-purple-600"/>} 
-               color="border-purple-500" 
-               bg="bg-purple-100"
-               onClick={()=>setActiveTab('wheel')}
-            />
-            <MenuCard 
-               title="Scrabble" 
-               desc="Puan hesaplama." 
-               icon={<Grid size={40} className="text-green-600"/>} 
-               color="border-green-500" 
-               bg="bg-green-100"
-               onClick={()=>setActiveTab('scrabble')}
-            />
-            <MenuCard 
-               title="101 Okey" 
-               desc="Ceza takibi." 
-               icon={<Calculator size={40} className="text-blue-600"/>} 
-               color="border-blue-500" 
-               bg="bg-blue-100"
-               onClick={()=>setActiveTab('okey')}
-            />
-          </div>
-        )}
+        <Routes>
+          {/* ANASAYFA (MENÜ) */}
+          <Route path="/" element={
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Link to="/wheel" className="no-underline">
+                <MenuCard 
+                  title="Şans Çarkı" 
+                  desc="İsim çekilişi yap." 
+                  icon={<RotateCw size={40} className="text-purple-600"/>} 
+                  color="border-purple-500" 
+                  bg="bg-purple-100"
+                />
+              </Link>
+              <Link to="/scrabble" className="no-underline">
+                <MenuCard 
+                  title="Scrabble" 
+                  desc="Puan hesaplama." 
+                  icon={<Grid size={40} className="text-green-600"/>} 
+                  color="border-green-500" 
+                  bg="bg-green-100"
+                />
+              </Link>
+              <Link to="/okey" className="no-underline">
+                <MenuCard 
+                  title="101 Okey" 
+                  desc="Ceza takibi." 
+                  icon={<Calculator size={40} className="text-blue-600"/>} 
+                  color="border-blue-500" 
+                  bg="bg-blue-100"
+                />
+              </Link>
+            </div>
+          } />
 
-        {/* MODÜLLER - Prop olarak veri ve güncelleme fonksiyonu gönderiyoruz */}
-        {activeTab === 'wheel' && (
-          <WheelGame 
-            data={userData.wheelItems} 
-            settings={userData.wheelSettings} 
-            onUpdate={updateDb} 
-            onBack={()=>setActiveTab('menu')}
-          />
-        )}
+          {/* OYUN SAYFALARI */}
+          <Route path="/wheel" element={
+            <WheelGame 
+              data={userData.wheelItems} 
+              settings={userData.wheelSettings} 
+              onUpdate={updateDb} 
+              onBack={() => navigate('/')} 
+            />
+          } />
+          
+          <Route path="/scrabble" element={
+            <ScrabbleGame 
+              data={userData.scrabble} 
+              onUpdate={updateDb} 
+              onBack={() => navigate('/')} 
+            />
+          } />
 
-        {activeTab === 'scrabble' && (
-          <ScrabbleGame 
-            data={userData.scrabble} 
-            onUpdate={updateDb} 
-            onBack={()=>setActiveTab('menu')}
-          />
-        )}
-
-        {activeTab === 'okey' && (
-          <OkeyGame 
-            data={userData.okey} 
-            onUpdate={updateDb} 
-            onBack={()=>setActiveTab('menu')}
-          />
-        )}
+          <Route path="/okey" element={
+            <OkeyGame 
+              data={userData.okey} 
+              onUpdate={updateDb} 
+              onBack={() => navigate('/')} 
+            />
+          } />
+        </Routes>
       </div>
-
-      <style>{`
-        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-        .animate-bounce-in { animation: bounceIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes bounceIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-      `}</style>
     </div>
   );
 }
 
 // Basit Kart Bileşeni
-function MenuCard({ title, desc, icon, color, bg, onClick }) {
+function MenuCard({ title, desc, icon, color, bg }) {
   return (
-    <div onClick={onClick} className={`bg-white p-8 rounded-2xl shadow-md hover:shadow-xl transition-all cursor-pointer border-t-4 ${color} flex flex-col items-center gap-4 group`}>
+    <div className={`bg-white p-8 rounded-2xl shadow-md hover:shadow-xl transition-all cursor-pointer border-t-4 ${color} flex flex-col items-center gap-4 group h-full`}>
       <div className={`${bg} p-4 rounded-full group-hover:scale-110 transition-transform`}>{icon}</div>
       <h2 className="text-2xl font-bold">{title}</h2>
       <p className="text-gray-500 text-center">{desc}</p>

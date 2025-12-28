@@ -1,12 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { RotateCw, Grid, Truck } from 'lucide-react'; // Truck ikonunu ekledik, Calculator'ı kaldırdık
+import { RotateCw, Grid, Truck, CalendarCheck } from 'lucide-react'; // CalendarCheck eklendi
 
 export default function AnaSayfa() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in">
       
-      {/* Sevkiyat Kartı (En başa aldık) */}
+      {/* Sevkiyat Planla */}
       <Link to="/sevkiyat" className="no-underline">
         <MenuCard 
           title="Sevkiyat Planla" 
@@ -17,7 +17,18 @@ export default function AnaSayfa() {
         />
       </Link>
 
-      {/* Şans Çarkı Kartı */}
+      {/* SKT Kontrol - YENİ */}
+      <Link to="/skt-kontrol" className="no-underline">
+        <MenuCard 
+          title="SKT Kontrol" 
+          desc="İrsaliye ve tarih bazlı analiz." 
+          icon={<CalendarCheck size={40} className="text-orange-600"/>} 
+          color="border-orange-500" 
+          bg="bg-orange-100" 
+        />
+      </Link>
+
+      {/* Şans Çarkı */}
       <Link to="/wheel" className="no-underline">
         <MenuCard 
           title="Şans Çarkı" 
@@ -28,7 +39,7 @@ export default function AnaSayfa() {
         />
       </Link>
 
-      {/* Scrabble Kartı */}
+      {/* Scrabble */}
       <Link to="/scrabble" className="no-underline">
         <MenuCard 
           title="Scrabble" 
@@ -42,7 +53,6 @@ export default function AnaSayfa() {
   );
 }
 
-// Kart Tasarımı
 function MenuCard({ title, desc, icon, color, bg }) {
   return (
     <div className={`bg-white p-8 rounded-2xl shadow-md hover:shadow-xl transition-all cursor-pointer border-t-4 ${color} flex flex-col items-center gap-4 group h-full`}>

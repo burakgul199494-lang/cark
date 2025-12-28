@@ -6,7 +6,10 @@ import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react
 
 // --- DOSYA BAĞLANTILARI ---
 import { auth, db } from './firebase';
-import Home from './Home';             // <-- YENİ EKLEDİĞİMİZ DOSYA
+
+// DİKKAT: Burası güncellendi (Artık AnaSayfa.js dosyasını çağırıyoruz)
+import AnaSayfa from './AnaSayfa'; 
+
 import WheelGame from './WheelGame';
 import ScrabbleGame from './ScrabbleGame';
 import OkeyGame from './OkeyGame';
@@ -132,8 +135,8 @@ function GameContent() {
       {/* Sayfa İçerikleri */}
       <div className="max-w-6xl mx-auto p-4 mt-6">
         <Routes>
-          {/* Anasayfa (Home) */}
-          <Route path="/" element={<Home />} />
+          {/* Anasayfa Rotası - GÜNCELLENDİ */}
+          <Route path="/" element={<AnaSayfa />} />
 
           {/* Oyunlar */}
           <Route path="/wheel" element={<WheelGame data={userData.wheelItems} settings={userData.wheelSettings} onUpdate={updateDb} onBack={() => navigate('/')} />} />

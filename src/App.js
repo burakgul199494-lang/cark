@@ -7,11 +7,13 @@ import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react
 // --- DOSYA BAĞLANTILARI ---
 import { auth, db } from './firebase';
 
-// Dosyalar yan yana olduğu için './' kullanıyoruz (components klasörü YOK)
+// AnaSayfa src klasöründe olduğu için böyle kalacak (Doğru)
 import AnaSayfa from './AnaSayfa'; 
-import WheelGame from './WheelGame';
-import ScrabbleGame from './ScrabbleGame';
-import OkeyGame from './OkeyGame';
+
+// DİKKAT: Oyunlar components klasöründe olduğu için yolları düzelttik:
+import WheelGame from './components/WheelGame';
+import ScrabbleGame from './components/ScrabbleGame';
+import OkeyGame from './components/OkeyGame';
 
 export default function App() {
   return (

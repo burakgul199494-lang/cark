@@ -41,7 +41,7 @@ export default function Home() {
   );
 }
 
-// Kart Tasarımı (Sadece bu sayfada kullanıldığı için buraya aldık)
+// Kart Tasarımı
 function MenuCard({ title, desc, icon, color, bg }) {
   return (
     <div className={`bg-white p-8 rounded-2xl shadow-md hover:shadow-xl transition-all cursor-pointer border-t-4 ${color} flex flex-col items-center gap-4 group h-full`}>

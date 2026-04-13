@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Truck, CalendarCheck } from 'lucide-react';
+import { Truck, CalendarCheck, MapPin } from 'lucide-react';
 
 export default function AnaSayfa() {
   return (
@@ -25,6 +25,17 @@ export default function AnaSayfa() {
           icon={<CalendarCheck size={48} className="text-orange-600 group-hover:scale-110 transition-transform"/>} 
           color="border-orange-500" 
           bg="bg-orange-50" 
+        />
+      </Link>
+
+      {/* Denetim Takip */}
+      <Link to="/denetim" className="no-underline group md:col-span-2">
+        <MenuCard 
+          title="Denetim Takip" 
+          desc="Birimlerin denetim süreleri ve akıllı rotasyon." 
+          icon={<MapPin size={48} className="text-teal-600 group-hover:scale-110 transition-transform"/>} 
+          color="border-teal-500" 
+          bg="bg-teal-50" 
         />
       </Link>
 

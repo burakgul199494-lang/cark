@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Plus, Trash2, Search, CheckCircle2, MapPin, 
-  History, ArrowLeft, AlertCircle, List, Settings, Edit 
+  History, ArrowLeft, AlertCircle, List, Settings, Edit, Filter 
 } from 'lucide-react';
 
 import { db, auth } from '../firebase';
@@ -17,9 +17,10 @@ export default function DenetimTakipApp({ onBack }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   
-  // YENİ EKLENEN DURUMLAR (State)
-  const [urgencyFilter, setUrgencyFilter] = useState('all'); // Filtreleme için
-  const [editingUnitId, setEditingUnitId] = useState(null); // Düzenleme modu için
+  // FİLTRELEME VE DÜZENLEME DURUMLARI
+  const [urgencyFilter, setUrgencyFilter] = useState('all'); 
+  const [selectedCityFilter, setSelectedCityFilter] = useState('all'); // İL FİLTRESİ
+  const [editingUnitId, setEditingUnitId] = useState(null); 
   const [editUnitData, setEditUnitData] = useState({ city: '', district: '', name: '' });
 
   // VERİTABANI İŞLEMLERİ
@@ -123,6 +124,11 @@ export default function DenetimTakipApp({ onBack }) {
     }
   }, []);
 
+  // MEvcut İlleri Otomatik Çıkar
+  const availableCities = useMemo(() => {
+    return [...new Set(units.map(u => u.city))].sort((a, b) => a.localeCompare(b, 'tr'));
+  }, [units]);
+
   const formatDateDisplay = (dateString) => {
     if (!dateString) return 'Kayıt Yok';
     const parts = dateString.split('-');
@@ -181,7 +187,6 @@ export default function DenetimTakipApp({ onBack }) {
     }
   };
 
-  // YENİ: Birim Güncelleme Fonksiyonu
   const handleUpdateUnit = async () => {
     if (editUnitData.city && editUnitData.district && editUnitData.name) {
       try {
@@ -225,7 +230,6 @@ export default function DenetimTakipApp({ onBack }) {
     }
   };
 
-  // GÜNCELLENMİŞ: Alfabetik (İl -> İlçe -> Birim) Sıralama ve Akıllı Filtreleme
   const unitStats = useMemo(() => {
     return units
       .map(unit => {
@@ -237,11 +241,10 @@ export default function DenetimTakipApp({ onBack }) {
       })
       .filter(u => 
         u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        u.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (u.district && u.district.toLowerCase().includes(searchTerm.toLowerCase()))
+        u.district.toLowerCase().includes(searchTerm.toLowerCase())
       )
+      .filter(u => selectedCityFilter === 'all' || u.city === selectedCityFilter) // İL FİLTRESİ
       .filter(u => {
-        // Tıklanan butona göre filtreleme mantığı
         if (urgencyFilter === 'all') return true;
         if (urgencyFilter === '0-15') return u.days <= 15;
         if (urgencyFilter === '16-30') return u.days >= 16 && u.days <= 30;
@@ -250,18 +253,15 @@ export default function DenetimTakipApp({ onBack }) {
         return true;
       })
       .sort((a, b) => {
-        // 1. Önce İle Göre Sırala
         const cityCompare = a.city.localeCompare(b.city, 'tr');
         if (cityCompare !== 0) return cityCompare;
         
-        // 2. İl aynıysa İlçeye Göre Sırala
         const districtCompare = (a.district || '').localeCompare((b.district || ''), 'tr');
         if (districtCompare !== 0) return districtCompare;
         
-        // 3. İlçe de aynıysa Birim Adına Göre Sırala
         return a.name.localeCompare(b.name, 'tr');
       });
-  }, [units, audits, searchTerm, urgencyFilter]);
+  }, [units, audits, searchTerm, urgencyFilter, selectedCityFilter]);
 
   const auditHistory = useMemo(() => {
     return audits
@@ -272,7 +272,6 @@ export default function DenetimTakipApp({ onBack }) {
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [audits, units]);
 
-  // Dinamik Filtre Seçenekleri
   const filterOptions = [
     { label: 'Tümü', value: 'all', color: 'bg-gray-400' },
     { label: '0-15 G', value: '0-15', color: 'bg-green-500' },
@@ -309,18 +308,31 @@ export default function DenetimTakipApp({ onBack }) {
         {activeTab === 'dashboard' && (
           <div className="space-y-4 animate-in fade-in duration-300">
             
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input 
-                type="text" 
-                placeholder="İl, ilçe veya birim ara..." 
-                className="w-full pl-12 pr-4 py-3.5 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition font-medium text-sm"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            {/* Arama ve İl Seçici (Yan Yana) */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input 
+                  type="text" 
+                  placeholder="İlçe veya birim ara..." 
+                  className="w-full pl-10 pr-3 py-3.5 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition font-medium text-sm"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <select 
+                className="w-1/3 px-2 py-3.5 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition font-bold text-gray-700 text-xs sm:text-sm text-center truncate"
+                value={selectedCityFilter}
+                onChange={(e) => setSelectedCityFilter(e.target.value)}
+              >
+                <option value="all">Tüm İller</option>
+                {availableCities.map(city => (
+                  <option key={city} value={city}>{city}</option>
+                ))}
+              </select>
             </div>
 
-            {/* AKTİF TIKLANABİLİR FİLTRE BUTONLARI */}
+            {/* AKTİF TIKLANABİLİR GÜN FİLTRELERİ */}
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
               {filterOptions.map(f => (
                 <button 
@@ -356,7 +368,7 @@ export default function DenetimTakipApp({ onBack }) {
               ))}
               {unitStats.length === 0 && (
                 <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">
-                  Bu filtreye uygun birim bulunamadı.
+                  Kritere uygun birim bulunamadı.
                 </div>
               )}
             </div>
@@ -436,7 +448,7 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
-        {/* BİRİM YÖNETİMİ EKRANI (DÜZENLEME EKLENDİ) */}
+        {/* BİRİM YÖNETİMİ EKRANI */}
         {activeTab === 'units' && (
           <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
@@ -488,7 +500,6 @@ export default function DenetimTakipApp({ onBack }) {
                   return a.name.localeCompare(b.name, 'tr');
                 }).map(unit => (
                   <div key={unit.id}>
-                    {/* DÜZENLEME MODU AÇIKSA */}
                     {editingUnitId === unit.id ? (
                       <div className="p-4 bg-blue-50 border-b border-blue-100 flex flex-col gap-3 animate-in fade-in">
                         <div className="flex gap-2">
@@ -511,7 +522,6 @@ export default function DenetimTakipApp({ onBack }) {
                         </div>
                       </div>
                     ) : (
-                      /* DÜZENLEME MODU KAPALIYSA NORMAL GÖRÜNÜM */
                       <div className="p-4 flex justify-between items-center bg-white hover:bg-gray-50 transition">
                         <div>
                           <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">

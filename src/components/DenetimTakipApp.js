@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Plus, Trash2, Search, CheckCircle2, MapPin, 
-  TrendingUp, History, Filter, RotateCw, ArrowLeft, AlertCircle, Map 
+  TrendingUp, History, Filter, RotateCw, ArrowLeft, AlertCircle 
 } from 'lucide-react';
 
-import { db } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
+// FİREBASE BAĞLANTILARI (auth eklendi)
+import { db, auth } from '../firebase';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, query, where, getDoc, setDoc } from 'firebase/firestore';
 
 export default function DenetimTakipApp({ onBack }) {
   const [units, setUnits] = useState([]);
   const [audits, setAudits] = useState([]);
 
-  // İlçe (district) alanı eklendi
   const [newUnit, setNewUnit] = useState({ city: '', district: '', name: '' });
   const [newAudit, setNewAudit] = useState({ unitId: '', date: new Date().toISOString().split('T')[0] });
   const [activeTab, setActiveTab] = useState('dashboard'); 
@@ -20,9 +20,51 @@ export default function DenetimTakipApp({ onBack }) {
   const [shuffleKey, setShuffleKey] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // FİREBASE'DEN KULLANICIYA ÖZEL VERİLERİ ÇEKME VE VARSAYILANLARI YÜKLEME
   useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setErrorMsg("Kullanıcı oturumu bulunamadı!");
+      return;
+    }
+
+    // 1. ADIM: Varsayılan Birimleri Kontrol Et ve Yükle
+    const initializeDefaultUnits = async () => {
+      try {
+        const flagRef = doc(db, 'user_flags', uid);
+        const flagSnap = await getDoc(flagRef);
+
+        // Eğer kullanıcı daha önce bu işlemi yapmadıysa
+        if (!flagSnap.exists() || !flagSnap.data().unitsInitialized) {
+          const defaultUnits = [
+            { city: 'İzmir', district: 'Buca', name: 'Şirinyer' },
+            { city: 'İzmir', district: 'Buca', name: 'Buca' },
+            { city: 'İzmir', district: 'Buca', name: 'Tınaztepe' },
+            { city: 'İzmir', district: 'Buca', name: 'Evka' },
+            { city: 'İzmir', district: 'Buca', name: 'Kuruçeşme' },
+            { city: 'İzmir', district: 'Buca', name: 'Fırat' },
+            { city: 'İzmir', district: 'Buca', name: 'Gaziemir' }
+          ];
+
+          // Varsayılanları kullanıcının ID'si ile veritabanına yaz
+          for (const u of defaultUnits) {
+            await addDoc(collection(db, 'units'), { ...u, userId: uid });
+          }
+
+          // Tekrar yüklememesi için kullanıcıya damga vur
+          await setDoc(flagRef, { unitsInitialized: true }, { merge: true });
+        }
+      } catch (err) {
+        console.error("Varsayılan birimler yüklenirken hata:", err);
+      }
+    };
+
+    initializeDefaultUnits();
+
+    // 2. ADIM: Sadece bu kullanıcının (userId) verilerini canlı dinle
     try {
-      const unsubUnits = onSnapshot(collection(db, 'units'), (snapshot) => {
+      const qUnits = query(collection(db, 'units'), where("userId", "==", uid));
+      const unsubUnits = onSnapshot(qUnits, (snapshot) => {
         const unitsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setUnits(unitsData);
       }, (err) => {
@@ -30,7 +72,8 @@ export default function DenetimTakipApp({ onBack }) {
         console.error(err);
       });
 
-      const unsubAudits = onSnapshot(collection(db, 'audits'), (snapshot) => {
+      const qAudits = query(collection(db, 'audits'), where("userId", "==", uid));
+      const unsubAudits = onSnapshot(qAudits, (snapshot) => {
         const auditsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAudits(auditsData);
       }, (err) => console.error(err));
@@ -71,14 +114,16 @@ export default function DenetimTakipApp({ onBack }) {
     return `${days} Gün (Acil)`;
   };
 
+  // İŞLEMLER (Kullanıcı kimliği (userId) eklenerek kayıt ediliyor)
   const handleAddUnit = async () => {
     if (newUnit.city && newUnit.name && newUnit.district) {
       try {
         setErrorMsg('');
         await addDoc(collection(db, 'units'), {
           city: newUnit.city.trim(),
-          district: newUnit.district.trim(), // İlçe eklendi
-          name: newUnit.name.trim()
+          district: newUnit.district.trim(),
+          name: newUnit.name.trim(),
+          userId: auth.currentUser.uid // Kullanıcıya zimmetle
         });
         setNewUnit({ city: '', district: '', name: '' });
         setActiveTab('dashboard');
@@ -102,7 +147,11 @@ export default function DenetimTakipApp({ onBack }) {
     if (newAudit.unitId && newAudit.date) {
       try {
         setErrorMsg('');
-        await addDoc(collection(db, 'audits'), { unitId: newAudit.unitId, date: newAudit.date });
+        await addDoc(collection(db, 'audits'), { 
+          unitId: newAudit.unitId, 
+          date: newAudit.date,
+          userId: auth.currentUser.uid // Kullanıcıya zimmetle
+        });
         setActiveTab('dashboard');
       } catch (error) { setErrorMsg(`Kaydedilemedi: ${error.message}`); }
     }
@@ -149,7 +198,7 @@ export default function DenetimTakipApp({ onBack }) {
     return [...new Set(units.map(u => u.city))].sort((a, b) => a.localeCompare(b, 'tr'));
   }, [units]);
 
-  // YENİ ROTA ALGORİTMASI (İlçe/Bölge Bazlı Kümeleme)
+  // ROTA ALGORİTMASI (İlçe/Bölge Bazlı Kümeleme)
   const recommendations = useMemo(() => {
     if (units.length === 0) return [];
     
@@ -162,17 +211,14 @@ export default function DenetimTakipApp({ onBack }) {
     if (selectedCityForRec) baseUnits = baseUnits.filter(u => u.city === selectedCityForRec);
     if (baseUnits.length === 0) return [];
 
-    // 1. Ana Hedefi Seç
     const primaryTarget = baseUnits[shuffleKey % Math.min(baseUnits.length, 3)];
 
-    // 2. Ana hedefin bulunduğu İLÇE/BÖLGE'deki DİĞER birimleri bul
     let clusterTargets = baseUnits.filter(u => 
       u.city === primaryTarget.city && 
       u.district === primaryTarget.district && 
       u.id !== primaryTarget.id
     );
 
-    // 3. Eğer aynı ilçede gidecek başka yer yoksa veya 2'den azsa, ildeki diğer acil yerlerle tamamla
     if (clusterTargets.length < 2) {
       const otherTargets = baseUnits.filter(u => 
         u.city === primaryTarget.city && 
@@ -182,7 +228,6 @@ export default function DenetimTakipApp({ onBack }) {
       clusterTargets = [...clusterTargets, ...otherTargets];
     }
 
-    // Sadece 2 tane yol üstü hedefi al
     clusterTargets = clusterTargets.slice(0, 2);
 
     return [
@@ -244,7 +289,6 @@ export default function DenetimTakipApp({ onBack }) {
 
         {activeTab === 'dashboard' && (
           <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
-            {/* Akıllı Rota Kartı */}
             <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl p-5 md:p-6 text-white shadow-lg relative overflow-hidden">
               <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
                 <MapPin size={100} />
@@ -292,7 +336,6 @@ export default function DenetimTakipApp({ onBack }) {
                         <span className={`text-[10px] font-bold uppercase ${rec.isPrimary ? 'text-blue-600' : 'text-blue-200'}`}>
                           {rec.city}
                         </span>
-                        {/* Rota bölgesi / İlçe gösterimi */}
                         <span className={`text-[12px] font-bold ${rec.isPrimary ? 'text-gray-800' : 'text-white'}`}>
                           {rec.district || 'Bölge Yok'}
                         </span>
@@ -310,7 +353,6 @@ export default function DenetimTakipApp({ onBack }) {
               </div>
             </div>
 
-            {/* Arama ve Liste */}
             <div className="space-y-4">
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -442,7 +484,6 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
-        {/* Birim Yönetimi Görünümü - İlçe Inputu Eklendi */}
         {activeTab === 'units' && (
           <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
             <div className="bg-white p-5 md:p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">

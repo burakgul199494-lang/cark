@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Plus, Trash2, Search, CheckCircle2, MapPin, 
-  TrendingUp, History, Filter, RotateCw, ArrowLeft, AlertCircle 
+  TrendingUp, History, Filter, RotateCw, ArrowLeft, AlertCircle, Map 
 } from 'lucide-react';
 
-// FİREBASE BAĞLANTISI
 import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 
@@ -12,7 +11,8 @@ export default function DenetimTakipApp({ onBack }) {
   const [units, setUnits] = useState([]);
   const [audits, setAudits] = useState([]);
 
-  const [newUnit, setNewUnit] = useState({ city: '', name: '' });
+  // İlçe (district) alanı eklendi
+  const [newUnit, setNewUnit] = useState({ city: '', district: '', name: '' });
   const [newAudit, setNewAudit] = useState({ unitId: '', date: new Date().toISOString().split('T')[0] });
   const [activeTab, setActiveTab] = useState('dashboard'); 
   const [searchTerm, setSearchTerm] = useState('');
@@ -20,7 +20,6 @@ export default function DenetimTakipApp({ onBack }) {
   const [shuffleKey, setShuffleKey] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // FİREBASE'DEN VERİLERİ ÇEKME
   useEffect(() => {
     try {
       const unsubUnits = onSnapshot(collection(db, 'units'), (snapshot) => {
@@ -34,9 +33,7 @@ export default function DenetimTakipApp({ onBack }) {
       const unsubAudits = onSnapshot(collection(db, 'audits'), (snapshot) => {
         const auditsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAudits(auditsData);
-      }, (err) => {
-        console.error(err);
-      });
+      }, (err) => console.error(err));
 
       return () => {
         unsubUnits();
@@ -53,8 +50,7 @@ export default function DenetimTakipApp({ onBack }) {
     today.setHours(0, 0, 0, 0);
     const auditDate = new Date(lastDate);
     auditDate.setHours(0, 0, 0, 0);
-    const diffTime = today - auditDate;
-    return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return Math.floor((today - auditDate) / (1000 * 60 * 60 * 24));
   };
 
   const getStatusColor = (days) => {
@@ -67,7 +63,7 @@ export default function DenetimTakipApp({ onBack }) {
   };
 
   const getStatusLabel = (days) => {
-    if (days === Infinity) return 'Hiç Denetlenmedi';
+    if (days === Infinity) return 'Hiç Gidilmedi';
     if (days === 0) return 'Bugün Gidildi';
     if (days <= 15) return `${days} Gün (Normal)`;
     if (days <= 30) return `${days} Gün (Dikkat)`;
@@ -75,20 +71,22 @@ export default function DenetimTakipApp({ onBack }) {
     return `${days} Gün (Acil)`;
   };
 
-  // İŞLEMLER (Try-Catch eklendi)
   const handleAddUnit = async () => {
-    if (newUnit.city && newUnit.name) {
+    if (newUnit.city && newUnit.name && newUnit.district) {
       try {
         setErrorMsg('');
         await addDoc(collection(db, 'units'), {
           city: newUnit.city.trim(),
+          district: newUnit.district.trim(), // İlçe eklendi
           name: newUnit.name.trim()
         });
-        setNewUnit({ city: '', name: '' });
+        setNewUnit({ city: '', district: '', name: '' });
         setActiveTab('dashboard');
       } catch (error) {
         setErrorMsg(`Kaydedilemedi: ${error.message}`);
       }
+    } else {
+      setErrorMsg('Lütfen İl, İlçe ve Birim Adı alanlarını doldurun.');
     }
   };
 
@@ -96,9 +94,7 @@ export default function DenetimTakipApp({ onBack }) {
     if(window.confirm('Bu birimi silmek istediğinize emin misiniz?')) {
       try {
         await deleteDoc(doc(db, 'units', id));
-      } catch (error) {
-        setErrorMsg(`Silinemedi: ${error.message}`);
-      }
+      } catch (error) { setErrorMsg(`Silinemedi: ${error.message}`); }
     }
   };
 
@@ -106,30 +102,19 @@ export default function DenetimTakipApp({ onBack }) {
     if (newAudit.unitId && newAudit.date) {
       try {
         setErrorMsg('');
-        await addDoc(collection(db, 'audits'), {
-          unitId: newAudit.unitId,
-          date: newAudit.date
-        });
+        await addDoc(collection(db, 'audits'), { unitId: newAudit.unitId, date: newAudit.date });
         setActiveTab('dashboard');
-      } catch (error) {
-        setErrorMsg(`Kaydedilemedi: ${error.message}`);
-      }
+      } catch (error) { setErrorMsg(`Kaydedilemedi: ${error.message}`); }
     }
   };
 
   const handleDeleteAudit = async (id) => {
     if(window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) {
-      try {
-        await deleteDoc(doc(db, 'audits', id));
-      } catch (error) {
-        setErrorMsg(`Silinemedi: ${error.message}`);
-      }
+      try { await deleteDoc(doc(db, 'audits', id)); } 
+      catch (error) { setErrorMsg(`Silinemedi: ${error.message}`); }
     }
   };
 
-  const refreshRecommendations = () => setShuffleKey(prev => prev + 1);
-
-  // Veri İşleme
   const unitStats = useMemo(() => {
     return units
       .map(unit => {
@@ -137,12 +122,12 @@ export default function DenetimTakipApp({ onBack }) {
         const lastAudit = unitAudits.length > 0 
           ? unitAudits.sort((a, b) => new Date(b.date) - new Date(a.date))[0].date 
           : null;
-        const days = getDaysPassed(lastAudit);
-        return { ...unit, lastAudit, days };
+        return { ...unit, lastAudit, days: getDaysPassed(lastAudit) };
       })
       .filter(u => 
         u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        u.city.toLowerCase().includes(searchTerm.toLowerCase())
+        u.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (u.district && u.district.toLowerCase().includes(searchTerm.toLowerCase()))
       )
       .sort((a, b) => {
         const cityCompare = a.city.localeCompare(b.city, 'tr');
@@ -161,49 +146,54 @@ export default function DenetimTakipApp({ onBack }) {
   }, [audits, units]);
 
   const availableCities = useMemo(() => {
-    const cities = units.map(u => u.city);
-    return [...new Set(cities)].sort((a, b) => a.localeCompare(b, 'tr'));
+    return [...new Set(units.map(u => u.city))].sort((a, b) => a.localeCompare(b, 'tr'));
   }, [units]);
 
-  // AKILLI MANTIKSAL ROTA ALGORİTMASI
+  // YENİ ROTA ALGORİTMASI (İlçe/Bölge Bazlı Kümeleme)
   const recommendations = useMemo(() => {
     if (units.length === 0) return [];
     
-    // 1. Tüm birimleri gecikme süresine göre en acilden en rahata doğru sırala
     let baseUnits = [...unitStats].sort((a, b) => {
       if (a.days === Infinity) return -1;
       if (b.days === Infinity) return 1;
       return b.days - a.days;
     });
 
-    // 2. Eğer kullanıcı bir il seçtiyse sadece o ili filtrele
-    if (selectedCityForRec) {
-      baseUnits = baseUnits.filter(u => u.city === selectedCityForRec);
-    }
-
+    if (selectedCityForRec) baseUnits = baseUnits.filter(u => u.city === selectedCityForRec);
     if (baseUnits.length === 0) return [];
 
-    // 3. İlk 3 acil birimden birini (şans faktörüyle) "Ana Hedef" olarak belirle
-    const poolSize = Math.min(baseUnits.length, 3);
-    const randomIndex = (shuffleKey) % poolSize;
-    const primaryTarget = baseUnits[randomIndex];
+    // 1. Ana Hedefi Seç
+    const primaryTarget = baseUnits[shuffleKey % Math.min(baseUnits.length, 3)];
 
-    // 4. Ana hedefin bulunduğu İL'deki DİĞER en acil birimleri bul (Yol Üstü hedefleri)
-    const sameCityOthers = baseUnits
-      .filter(u => u.city === primaryTarget.city && u.id !== primaryTarget.id)
-      .slice(0, 2); // En fazla 2 tane yol üstü hedefi al
+    // 2. Ana hedefin bulunduğu İLÇE/BÖLGE'deki DİĞER birimleri bul
+    let clusterTargets = baseUnits.filter(u => 
+      u.city === primaryTarget.city && 
+      u.district === primaryTarget.district && 
+      u.id !== primaryTarget.id
+    );
 
-    // 5. Birleştir ve geri dön
+    // 3. Eğer aynı ilçede gidecek başka yer yoksa veya 2'den azsa, ildeki diğer acil yerlerle tamamla
+    if (clusterTargets.length < 2) {
+      const otherTargets = baseUnits.filter(u => 
+        u.city === primaryTarget.city && 
+        u.district !== primaryTarget.district && 
+        u.id !== primaryTarget.id
+      );
+      clusterTargets = [...clusterTargets, ...otherTargets];
+    }
+
+    // Sadece 2 tane yol üstü hedefi al
+    clusterTargets = clusterTargets.slice(0, 2);
+
     return [
       { ...primaryTarget, routeType: 'Ana Hedef', isPrimary: true },
-      ...sameCityOthers.map(u => ({ ...u, routeType: 'Yol Üstü', isPrimary: false }))
+      ...clusterTargets.map(u => ({ ...u, routeType: 'Yol Üstü', isPrimary: false }))
     ];
   }, [unitStats, selectedCityForRec, shuffleKey]);
 
   return (
     <div className="max-w-4xl mx-auto animate-fade-in pb-32 p-3 md:p-0">
       
-      {/* Üst Kısım: Menüye Dön ve Başlık */}
       <div className="flex justify-between items-center mb-4 md:mb-6">
         <button onClick={onBack} className="flex items-center text-gray-500 hover:text-indigo-600 transition-colors py-2">
           <ArrowLeft size={20} className="mr-1" /> Menü
@@ -263,9 +253,9 @@ export default function DenetimTakipApp({ onBack }) {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 relative z-10">
                 <div>
                   <h2 className="text-lg font-bold flex items-center gap-2">
-                    <TrendingUp size={20} /> Mantıksal Rota Önerisi
+                    <TrendingUp size={20} /> Bölgesel Rota Önerisi
                   </h2>
-                  <p className="text-xs text-blue-100 mt-1">Konum ve aciliyete göre optimize edilmiştir.</p>
+                  <p className="text-xs text-blue-100 mt-1">Aciliyet ve yakınlığa göre paket rotalar.</p>
                 </div>
                 
                 <div className="flex items-center justify-between gap-2">
@@ -286,7 +276,7 @@ export default function DenetimTakipApp({ onBack }) {
                     </select>
                   </div>
                   <button 
-                    onClick={refreshRecommendations}
+                    onClick={() => setShuffleKey(prev => prev + 1)}
                     className="p-3 bg-white/10 hover:bg-white/20 rounded-xl border border-white/20 transition group"
                   >
                     <RotateCw size={18} className="text-white group-active:rotate-180 transition-transform duration-500" />
@@ -298,14 +288,20 @@ export default function DenetimTakipApp({ onBack }) {
                 {recommendations.length > 0 ? recommendations.map((rec, idx) => (
                   <div key={`${rec.id}-${shuffleKey}`} className={`backdrop-blur-md border p-4 rounded-xl transition cursor-default ${rec.isPrimary ? 'bg-white text-blue-900 border-white' : 'bg-white/10 border-white/20 hover:bg-white/20'}`}>
                     <div className="flex justify-between items-start mb-2">
-                      <span className={`text-[11px] font-bold uppercase ${rec.isPrimary ? 'text-blue-600' : 'text-blue-200'}`}>
-                        {rec.city}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className={`text-[10px] font-bold uppercase ${rec.isPrimary ? 'text-blue-600' : 'text-blue-200'}`}>
+                          {rec.city}
+                        </span>
+                        {/* Rota bölgesi / İlçe gösterimi */}
+                        <span className={`text-[12px] font-bold ${rec.isPrimary ? 'text-gray-800' : 'text-white'}`}>
+                          {rec.district || 'Bölge Yok'}
+                        </span>
+                      </div>
                       <span className={`${rec.isPrimary ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'} text-[10px] px-2 py-0.5 rounded-full shadow-sm font-bold flex items-center gap-1`}>
-                        {rec.isPrimary ? '📍 Ana Hedef' : '🚗 Yol Üstü'}
+                        {rec.routeType}
                       </span>
                     </div>
-                    <p className="font-bold text-base md:text-sm">{rec.name}</p>
+                    <p className="font-bold text-base md:text-sm mt-1">{rec.name}</p>
                     <p className={`text-xs mt-1 font-medium ${rec.isPrimary ? 'text-blue-800' : 'text-blue-100'}`}>
                       {rec.days === Infinity ? 'Hiç gidilmedi' : (rec.days === 0 ? 'Bugün denetlendi' : `${rec.days} gündür gidilmedi`)}
                     </p>
@@ -314,12 +310,13 @@ export default function DenetimTakipApp({ onBack }) {
               </div>
             </div>
 
+            {/* Arama ve Liste */}
             <div className="space-y-4">
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                 <input 
                   type="text" 
-                  placeholder="İl veya birim ara..." 
+                  placeholder="İl, ilçe veya birim ara..." 
                   className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm font-medium text-sm"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -334,8 +331,8 @@ export default function DenetimTakipApp({ onBack }) {
                         <MapPin className={getStatusColor(unit.days).split(' ')[1]} size={20} />
                       </div>
                       <div className="truncate">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider hidden md:inline">{unit.city}</span>
+                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{unit.city} {unit.district ? `/ ${unit.district}` : ''}</span>
                           <h3 className="font-bold text-gray-800 text-sm md:text-base truncate">{unit.name}</h3>
                         </div>
                         <p className="text-[11px] md:text-xs text-gray-500 mt-1 flex items-center gap-1 font-medium">
@@ -388,9 +385,7 @@ export default function DenetimTakipApp({ onBack }) {
                   </div>
                 ))}
                 {audits.length === 0 && (
-                  <div className="p-12 text-center text-gray-400 italic text-sm">
-                    Kayıtlı denetim bulunmuyor.
-                  </div>
+                  <div className="p-12 text-center text-gray-400 italic text-sm">Kayıtlı denetim bulunmuyor.</div>
                 )}
               </div>
             </div>
@@ -415,7 +410,7 @@ export default function DenetimTakipApp({ onBack }) {
                     const c = a.city.localeCompare(b.city, 'tr');
                     return c !== 0 ? c : a.name.localeCompare(b.name, 'tr');
                   }).map(u => (
-                    <option key={u.id} value={u.id}>{u.city} - {u.name}</option>
+                    <option key={u.id} value={u.id}>{u.city} {u.district ? `(${u.district})` : ''} - {u.name}</option>
                   ))}
                 </select>
               </div>
@@ -447,19 +442,27 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
+        {/* Birim Yönetimi Görünümü - İlçe Inputu Eklendi */}
         {activeTab === 'units' && (
           <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
             <div className="bg-white p-5 md:p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
               <h2 className="text-lg font-bold flex items-center gap-2 text-gray-800">
                 <MapPin className="text-green-600" /> Yeni Birim Ekle
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <input 
                   type="text" 
                   placeholder="İl (Örn: İzmir)" 
                   className="p-4 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-sm"
                   value={newUnit.city}
                   onChange={(e) => setNewUnit({...newUnit, city: e.target.value})}
+                />
+                <input 
+                  type="text" 
+                  placeholder="İlçe / Bölge (Örn: Buca)" 
+                  className="p-4 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-sm"
+                  value={newUnit.district}
+                  onChange={(e) => setNewUnit({...newUnit, district: e.target.value})}
                 />
                 <input 
                   type="text" 
@@ -484,11 +487,15 @@ export default function DenetimTakipApp({ onBack }) {
               <div className="divide-y divide-gray-50 max-h-[400px] overflow-y-auto">
                 {[...units].sort((a,b) => {
                   const c = a.city.localeCompare(b.city, 'tr');
-                  return c !== 0 ? c : a.name.localeCompare(b.name, 'tr');
+                  if (c !== 0) return c;
+                  const d = (a.district || '').localeCompare((b.district || ''), 'tr');
+                  return d !== 0 ? d : a.name.localeCompare(b.name, 'tr');
                 }).map(unit => (
                   <div key={unit.id} className="p-4 flex justify-between items-center hover:bg-gray-50 transition">
                     <div>
-                      <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{unit.city}</p>
+                      <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">
+                        {unit.city} {unit.district ? `• ${unit.district}` : ''}
+                      </p>
                       <p className="font-bold text-gray-800 text-sm md:text-base">{unit.name}</p>
                     </div>
                     <button 

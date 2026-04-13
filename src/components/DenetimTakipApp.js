@@ -8,10 +8,9 @@ import {
   MapPin, 
   TrendingUp,
   History,
-  Info,
   Filter,
   RotateCw,
-  ArrowLeft // Menüye dönüş için eklendi
+  ArrowLeft 
 } from 'lucide-react';
 
 export default function DenetimTakipApp({ onBack }) {
@@ -179,7 +178,6 @@ export default function DenetimTakipApp({ onBack }) {
   }, [unitStats, selectedCityForRec, shuffleKey]);
 
   return (
-    // Senin sistemindeki max-w-4xl mx-auto animate-fade-in yapısına entegre edildi
     <div className="max-w-4xl mx-auto animate-fade-in pb-28 p-2 md:p-0">
       
       {/* Üst Kısım: Menüye Dön ve Başlık */}

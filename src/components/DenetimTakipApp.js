@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Plus, Trash2, Search, CheckCircle2, MapPin, 
-  History, ArrowLeft, AlertCircle, List, Settings 
+  History, ArrowLeft, AlertCircle, List, Settings, Edit 
 } from 'lucide-react';
 
 import { db, auth } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, where, getDoc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query, where, getDoc, setDoc } from 'firebase/firestore';
 
 export default function DenetimTakipApp({ onBack }) {
   const [units, setUnits] = useState([]);
@@ -16,6 +16,11 @@ export default function DenetimTakipApp({ onBack }) {
   const [activeTab, setActiveTab] = useState('dashboard'); 
   const [searchTerm, setSearchTerm] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  
+  // YENİ EKLENEN DURUMLAR (State)
+  const [urgencyFilter, setUrgencyFilter] = useState('all'); // Filtreleme için
+  const [editingUnitId, setEditingUnitId] = useState(null); // Düzenleme modu için
+  const [editUnitData, setEditUnitData] = useState({ city: '', district: '', name: '' });
 
   // VERİTABANI İŞLEMLERİ
   useEffect(() => {
@@ -155,9 +160,6 @@ export default function DenetimTakipApp({ onBack }) {
   const getStatusLabel = (days) => {
     if (days === Infinity) return 'Hiç Gidilmedi';
     if (days === 0) return 'Bugün Gidildi';
-    if (days <= 15) return `${days} Gün`;
-    if (days <= 30) return `${days} Gün`;
-    if (days <= 44) return `${days} Gün`;
     return `${days} Gün`;
   };
 
@@ -173,10 +175,26 @@ export default function DenetimTakipApp({ onBack }) {
           userId: uid
         });
         setNewUnit({ city: '', district: '', name: '' });
-        setActiveTab('dashboard');
       } catch (error) { setErrorMsg(`Kaydedilemedi: ${error.message}`); }
     } else {
       setErrorMsg('Lütfen tüm alanları doldurun.');
+    }
+  };
+
+  // YENİ: Birim Güncelleme Fonksiyonu
+  const handleUpdateUnit = async () => {
+    if (editUnitData.city && editUnitData.district && editUnitData.name) {
+      try {
+        setErrorMsg('');
+        await updateDoc(doc(db, 'bireysel_birimler', editingUnitId), {
+          city: editUnitData.city.trim(),
+          district: editUnitData.district.trim(),
+          name: editUnitData.name.trim()
+        });
+        setEditingUnitId(null);
+      } catch (error) { setErrorMsg(`Güncellenemedi: ${error.message}`); }
+    } else {
+      setErrorMsg('Tüm alanlar dolu olmalıdır.');
     }
   };
 
@@ -195,7 +213,7 @@ export default function DenetimTakipApp({ onBack }) {
         await addDoc(collection(db, 'bireysel_denetimler'), { 
           unitId: newAudit.unitId, date: newAudit.date, userId: uid
         });
-        setNewAudit({...newAudit, unitId: ''}); // Sadece birimi sıfırla
+        setNewAudit({...newAudit, unitId: ''}); 
       } catch (error) { setErrorMsg(`Hata: ${error.message}`); }
     }
   };
@@ -207,6 +225,7 @@ export default function DenetimTakipApp({ onBack }) {
     }
   };
 
+  // GÜNCELLENMİŞ: Alfabetik (İl -> İlçe -> Birim) Sıralama ve Akıllı Filtreleme
   const unitStats = useMemo(() => {
     return units
       .map(unit => {
@@ -221,12 +240,28 @@ export default function DenetimTakipApp({ onBack }) {
         u.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (u.district && u.district.toLowerCase().includes(searchTerm.toLowerCase()))
       )
+      .filter(u => {
+        // Tıklanan butona göre filtreleme mantığı
+        if (urgencyFilter === 'all') return true;
+        if (urgencyFilter === '0-15') return u.days <= 15;
+        if (urgencyFilter === '16-30') return u.days >= 16 && u.days <= 30;
+        if (urgencyFilter === '31-44') return u.days >= 31 && u.days <= 44;
+        if (urgencyFilter === '45+') return u.days >= 45 || u.days === Infinity;
+        return true;
+      })
       .sort((a, b) => {
-        if (a.days === Infinity) return -1;
-        if (b.days === Infinity) return 1;
-        return b.days - a.days; // En aciller en üstte
+        // 1. Önce İle Göre Sırala
+        const cityCompare = a.city.localeCompare(b.city, 'tr');
+        if (cityCompare !== 0) return cityCompare;
+        
+        // 2. İl aynıysa İlçeye Göre Sırala
+        const districtCompare = (a.district || '').localeCompare((b.district || ''), 'tr');
+        if (districtCompare !== 0) return districtCompare;
+        
+        // 3. İlçe de aynıysa Birim Adına Göre Sırala
+        return a.name.localeCompare(b.name, 'tr');
       });
-  }, [units, audits, searchTerm]);
+  }, [units, audits, searchTerm, urgencyFilter]);
 
   const auditHistory = useMemo(() => {
     return audits
@@ -236,6 +271,15 @@ export default function DenetimTakipApp({ onBack }) {
       })
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [audits, units]);
+
+  // Dinamik Filtre Seçenekleri
+  const filterOptions = [
+    { label: 'Tümü', value: 'all', color: 'bg-gray-400' },
+    { label: '0-15 G', value: '0-15', color: 'bg-green-500' },
+    { label: '16-30 G', value: '16-30', color: 'bg-yellow-400' },
+    { label: '31-44 G', value: '31-44', color: 'bg-orange-500' },
+    { label: '45+ G', value: '45+', color: 'bg-red-600' }
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 font-sans">
@@ -249,7 +293,7 @@ export default function DenetimTakipApp({ onBack }) {
           <CheckCircle2 className="text-blue-600" size={22} />
           Denetim Takip
         </h1>
-        <div className="w-8"></div> {/* Hizalama için boş div */}
+        <div className="w-8"></div> 
       </div>
 
       {errorMsg && (
@@ -265,7 +309,6 @@ export default function DenetimTakipApp({ onBack }) {
         {activeTab === 'dashboard' && (
           <div className="space-y-4 animate-in fade-in duration-300">
             
-            {/* Arama Kutusu */}
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
               <input 
@@ -277,23 +320,20 @@ export default function DenetimTakipApp({ onBack }) {
               />
             </div>
 
-            {/* Renk Skalası (Yatay Kaydırılabilir) */}
+            {/* AKTİF TIKLANABİLİR FİLTRE BUTONLARI */}
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-              <div className="flex-none bg-white px-3 py-1.5 rounded-lg shadow-sm border border-gray-100 flex items-center gap-1.5 text-xs font-bold text-gray-600">
-                <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div> 0-15 Gün
-              </div>
-              <div className="flex-none bg-white px-3 py-1.5 rounded-lg shadow-sm border border-gray-100 flex items-center gap-1.5 text-xs font-bold text-gray-600">
-                <div className="w-2.5 h-2.5 rounded-full bg-yellow-400"></div> 16-30 Gün
-              </div>
-              <div className="flex-none bg-white px-3 py-1.5 rounded-lg shadow-sm border border-gray-100 flex items-center gap-1.5 text-xs font-bold text-gray-600">
-                <div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div> 31-44 Gün
-              </div>
-              <div className="flex-none bg-white px-3 py-1.5 rounded-lg shadow-sm border border-gray-100 flex items-center gap-1.5 text-xs font-bold text-gray-600">
-                <div className="w-2.5 h-2.5 rounded-full bg-red-600"></div> 45+ Gün
-              </div>
+              {filterOptions.map(f => (
+                <button 
+                  key={f.value}
+                  onClick={() => setUrgencyFilter(f.value)}
+                  className={`flex-none px-3 py-1.5 rounded-lg shadow-sm border flex items-center gap-1.5 text-xs font-bold transition-all ${urgencyFilter === f.value ? 'bg-blue-50 border-blue-200 text-blue-700 scale-[1.02]' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50'}`}
+                >
+                  {f.value !== 'all' && <div className={`w-2.5 h-2.5 rounded-full ${f.color}`}></div>}
+                  {f.label}
+                </button>
+              ))}
             </div>
 
-            {/* Birim Kartları */}
             <div className="grid gap-3">
               {unitStats.map(unit => (
                 <div key={unit.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between gap-3 active:scale-[0.98] transition-transform">
@@ -314,11 +354,16 @@ export default function DenetimTakipApp({ onBack }) {
                   </div>
                 </div>
               ))}
+              {unitStats.length === 0 && (
+                <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">
+                  Bu filtreye uygun birim bulunamadı.
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* DENETİM EKLE VE GEÇMİŞ EKRANI */}
+        {/* DENETİM EKLE EKRANI */}
         {activeTab === 'addAudit' && (
           <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-300">
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
@@ -334,7 +379,13 @@ export default function DenetimTakipApp({ onBack }) {
                     onChange={(e) => setNewAudit({...newAudit, unitId: e.target.value})}
                   >
                     <option value="">Listedeki birimlerden seçin...</option>
-                    {[...units].sort((a,b) => a.city.localeCompare(b.city, 'tr') || a.name.localeCompare(b.name, 'tr')).map(u => (
+                    {[...units].sort((a,b) => {
+                      const c = a.city.localeCompare(b.city, 'tr');
+                      if (c !== 0) return c;
+                      const d = (a.district || '').localeCompare((b.district || ''), 'tr');
+                      if (d !== 0) return d;
+                      return a.name.localeCompare(b.name, 'tr');
+                    }).map(u => (
                       <option key={u.id} value={u.id}>{u.city} ({u.district}) - {u.name}</option>
                     ))}
                   </select>
@@ -385,7 +436,7 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
-        {/* BİRİM YÖNETİMİ EKRANI */}
+        {/* BİRİM YÖNETİMİ EKRANI (DÜZENLEME EKLENDİ) */}
         {activeTab === 'units' && (
           <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
@@ -429,20 +480,64 @@ export default function DenetimTakipApp({ onBack }) {
                 <span className="bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded-md font-bold">{units.length}</span>
               </div>
               <div className="divide-y divide-gray-50 max-h-[400px] overflow-y-auto">
-                {[...units].sort((a,b) => a.city.localeCompare(b.city, 'tr') || a.name.localeCompare(b.name, 'tr')).map(unit => (
-                  <div key={unit.id} className="p-4 flex justify-between items-center bg-white hover:bg-gray-50 transition">
-                    <div>
-                      <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">
-                        {unit.city} {unit.district ? `• ${unit.district}` : ''}
-                      </p>
-                      <p className="font-bold text-gray-800 text-sm mt-0.5">{unit.name}</p>
-                    </div>
-                    <button 
-                      onClick={() => handleDeleteUnit(unit.id)}
-                      className="p-3 text-red-400 hover:bg-red-50 active:bg-red-100 rounded-xl transition"
-                    >
-                      <Trash2 size={20} />
-                    </button>
+                {[...units].sort((a,b) => {
+                  const c = a.city.localeCompare(b.city, 'tr');
+                  if (c !== 0) return c;
+                  const d = (a.district || '').localeCompare((b.district || ''), 'tr');
+                  if (d !== 0) return d;
+                  return a.name.localeCompare(b.name, 'tr');
+                }).map(unit => (
+                  <div key={unit.id}>
+                    {/* DÜZENLEME MODU AÇIKSA */}
+                    {editingUnitId === unit.id ? (
+                      <div className="p-4 bg-blue-50 border-b border-blue-100 flex flex-col gap-3 animate-in fade-in">
+                        <div className="flex gap-2">
+                          <input 
+                            className="flex-1 p-2.5 rounded-lg border border-blue-200 text-sm font-bold text-gray-700 outline-none focus:border-blue-400" 
+                            value={editUnitData.city} onChange={e => setEditUnitData({...editUnitData, city: e.target.value})} placeholder="İl"
+                          />
+                          <input 
+                            className="flex-1 p-2.5 rounded-lg border border-blue-200 text-sm font-bold text-gray-700 outline-none focus:border-blue-400" 
+                            value={editUnitData.district} onChange={e => setEditUnitData({...editUnitData, district: e.target.value})} placeholder="İlçe"
+                          />
+                        </div>
+                        <input 
+                          className="w-full p-2.5 rounded-lg border border-blue-200 text-sm font-bold text-gray-700 outline-none focus:border-blue-400" 
+                          value={editUnitData.name} onChange={e => setEditUnitData({...editUnitData, name: e.target.value})} placeholder="Birim Adı"
+                        />
+                        <div className="flex gap-2 mt-1">
+                          <button onClick={handleUpdateUnit} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm font-bold shadow-sm">Kaydet</button>
+                          <button onClick={() => setEditingUnitId(null)} className="flex-1 bg-white border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm font-bold">İptal</button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* DÜZENLEME MODU KAPALIYSA NORMAL GÖRÜNÜM */
+                      <div className="p-4 flex justify-between items-center bg-white hover:bg-gray-50 transition">
+                        <div>
+                          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">
+                            {unit.city} {unit.district ? `• ${unit.district}` : ''}
+                          </p>
+                          <p className="font-bold text-gray-800 text-sm mt-0.5">{unit.name}</p>
+                        </div>
+                        <div className="flex gap-1">
+                          <button 
+                            onClick={() => {
+                              setEditingUnitId(unit.id);
+                              setEditUnitData({ city: unit.city, district: unit.district, name: unit.name });
+                            }}
+                            className="p-3 text-blue-400 hover:bg-blue-50 active:bg-blue-100 rounded-xl transition"
+                          >
+                            <Edit size={18} />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteUnit(unit.id)}
+                            className="p-3 text-red-400 hover:bg-red-50 active:bg-red-100 rounded-xl transition"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -452,7 +547,7 @@ export default function DenetimTakipApp({ onBack }) {
 
       </div>
 
-      {/* FLOATİNG ACTİON BUTTON (Sadece Listede Görünür) */}
+      {/* FLOATİNG ACTİON BUTTON */}
       {activeTab === 'dashboard' && (
         <button 
           onClick={() => setActiveTab('addAudit')}
@@ -462,7 +557,7 @@ export default function DenetimTakipApp({ onBack }) {
         </button>
       )}
 
-      {/* MOBİL ALT NAVİGASYON BARI (Bütün sekmeleri yönetir) */}
+      {/* MOBİL ALT NAVİGASYON BARI */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around items-center pb-safe z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.02)] h-16 px-2">
         <button 
           onClick={() => setActiveTab('dashboard')} 

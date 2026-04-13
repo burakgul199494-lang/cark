@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Plus, Trash2, Search, CheckCircle2, MapPin, 
-  TrendingUp, History, Filter, RotateCw, ArrowLeft, AlertCircle 
+  History, ArrowLeft, AlertCircle 
 } from 'lucide-react';
 
 import { db, auth } from '../firebase';
@@ -15,11 +15,9 @@ export default function DenetimTakipApp({ onBack }) {
   const [newAudit, setNewAudit] = useState({ unitId: '', date: new Date().toISOString().split('T')[0] });
   const [activeTab, setActiveTab] = useState('dashboard'); 
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCityForRec, setSelectedCityForRec] = useState('');
-  const [shuffleKey, setShuffleKey] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // SADECE GİRİŞ YAPAN KULLANICIYI DİNLE (Yeni Tablolarla)
+  // SADECE GİRİŞ YAPAN KULLANICIYI DİNLE
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!uid) {
@@ -27,14 +25,12 @@ export default function DenetimTakipApp({ onBack }) {
       return;
     }
 
-    // 1. ADIM: 51 Birimlik Gerçek Listeyi Varsayılan Olarak Yükle
     const initializeDefaultUnits = async () => {
       try {
         const flagRef = doc(db, 'kullanici_ayarlari', uid);
         const flagSnap = await getDoc(flagRef);
 
         if (!flagSnap.exists() || !flagSnap.data().baslangicBirimleriEklendi) {
-          // Bize ilettiğin 51 birimlik tam liste
           const defaultUnits = [
             { city: 'Aydın', district: 'Didim', name: 'Didim' },
             { city: 'Aydın', district: 'Didim', name: 'Didim Akbük' },
@@ -93,7 +89,6 @@ export default function DenetimTakipApp({ onBack }) {
             await addDoc(collection(db, 'bireysel_birimler'), { ...u, userId: uid });
           }
 
-          // İşaretle ki sayfayı yenileyince tekrar yükleyip sildiklerini geri getirmesin
           await setDoc(flagRef, { baslangicBirimleriEklendi: true }, { merge: true });
         }
       } catch (err) {
@@ -103,7 +98,6 @@ export default function DenetimTakipApp({ onBack }) {
 
     initializeDefaultUnits();
 
-    // 2. ADIM: YENİ TABLOLARDAN CANLI VERİ ÇEK 
     try {
       const qUnits = query(collection(db, 'bireysel_birimler'), where("userId", "==", uid));
       const unsubUnits = onSnapshot(qUnits, (snapshot) => {
@@ -125,6 +119,16 @@ export default function DenetimTakipApp({ onBack }) {
       setErrorMsg("Bağlantı hatası veya yetki reddedildi!");
     }
   }, []);
+
+  // Tarihi YYYY-MM-DD'den DD-MM-YYYY formatına çeviren yardımcı fonksiyon
+  const formatDateDisplay = (dateString) => {
+    if (!dateString) return 'Kayıt Yok';
+    const parts = dateString.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    return dateString;
+  };
 
   const getDaysPassed = (lastDate) => {
     if (!lastDate) return Infinity;
@@ -153,7 +157,6 @@ export default function DenetimTakipApp({ onBack }) {
     return `${days} Gün (Acil)`;
   };
 
-  // İŞLEMLER
   const handleAddUnit = async () => {
     const uid = auth.currentUser?.uid;
     if (newUnit.city && newUnit.name && newUnit.district && uid) {
@@ -193,7 +196,9 @@ export default function DenetimTakipApp({ onBack }) {
           date: newAudit.date,
           userId: uid
         });
-        setActiveTab('dashboard');
+        // Sadece Birim seçimini sıfırla, tarihi sabit bırak ki peş peşe giriş kolaylaşsın.
+        setNewAudit({...newAudit, unitId: ''});
+        // setActiveTab('dashboard'); // --> YÖNLENDİRME İPTAL EDİLDİ
       } catch (error) { setErrorMsg(`Kaydedilemedi: ${error.message}`); }
     }
   };
@@ -234,47 +239,6 @@ export default function DenetimTakipApp({ onBack }) {
       })
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [audits, units]);
-
-  const availableCities = useMemo(() => {
-    return [...new Set(units.map(u => u.city))].sort((a, b) => a.localeCompare(b, 'tr'));
-  }, [units]);
-
-  const recommendations = useMemo(() => {
-    if (units.length === 0) return [];
-    
-    let baseUnits = [...unitStats].sort((a, b) => {
-      if (a.days === Infinity) return -1;
-      if (b.days === Infinity) return 1;
-      return b.days - a.days;
-    });
-
-    if (selectedCityForRec) baseUnits = baseUnits.filter(u => u.city === selectedCityForRec);
-    if (baseUnits.length === 0) return [];
-
-    const primaryTarget = baseUnits[shuffleKey % Math.min(baseUnits.length, 3)];
-
-    let clusterTargets = baseUnits.filter(u => 
-      u.city === primaryTarget.city && 
-      u.district === primaryTarget.district && 
-      u.id !== primaryTarget.id
-    );
-
-    if (clusterTargets.length < 2) {
-      const otherTargets = baseUnits.filter(u => 
-        u.city === primaryTarget.city && 
-        u.district !== primaryTarget.district && 
-        u.id !== primaryTarget.id
-      );
-      clusterTargets = [...clusterTargets, ...otherTargets];
-    }
-
-    clusterTargets = clusterTargets.slice(0, 2);
-
-    return [
-      { ...primaryTarget, routeType: 'Ana Hedef', isPrimary: true },
-      ...clusterTargets.map(u => ({ ...u, routeType: 'Yol Üstü', isPrimary: false }))
-    ];
-  }, [unitStats, selectedCityForRec, shuffleKey]);
 
   return (
     <div className="max-w-4xl mx-auto animate-fade-in pb-32 p-3 md:p-0">
@@ -329,70 +293,6 @@ export default function DenetimTakipApp({ onBack }) {
 
         {activeTab === 'dashboard' && (
           <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
-            <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl p-5 md:p-6 text-white shadow-lg relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                <MapPin size={100} />
-              </div>
-              
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 relative z-10">
-                <div>
-                  <h2 className="text-lg font-bold flex items-center gap-2">
-                    <TrendingUp size={20} /> Bölgesel Rota Önerisi
-                  </h2>
-                  <p className="text-xs text-blue-100 mt-1">Aciliyet ve yakınlığa göre paket rotalar.</p>
-                </div>
-                
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm p-2 rounded-xl border border-white/20 flex-1">
-                    <Filter size={16} className="ml-1 text-blue-200" />
-                    <select 
-                      className="bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer pr-2 w-full"
-                      value={selectedCityForRec}
-                      onChange={(e) => {
-                        setSelectedCityForRec(e.target.value);
-                        setShuffleKey(0);
-                      }}
-                    >
-                      <option value="" className="text-gray-900">Tüm İller</option>
-                      {availableCities.map(city => (
-                        <option key={city} value={city} className="text-gray-900">{city}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <button 
-                    onClick={() => setShuffleKey(prev => prev + 1)}
-                    className="p-3 bg-white/10 hover:bg-white/20 rounded-xl border border-white/20 transition group"
-                  >
-                    <RotateCw size={18} className="text-white group-active:rotate-180 transition-transform duration-500" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 relative z-10">
-                {recommendations.length > 0 ? recommendations.map((rec, idx) => (
-                  <div key={`${rec.id}-${shuffleKey}`} className={`backdrop-blur-md border p-4 rounded-xl transition cursor-default ${rec.isPrimary ? 'bg-white text-blue-900 border-white' : 'bg-white/10 border-white/20 hover:bg-white/20'}`}>
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex flex-col">
-                        <span className={`text-[10px] font-bold uppercase ${rec.isPrimary ? 'text-blue-600' : 'text-blue-200'}`}>
-                          {rec.city}
-                        </span>
-                        <span className={`text-[12px] font-bold ${rec.isPrimary ? 'text-gray-800' : 'text-white'}`}>
-                          {rec.district || 'Bölge Yok'}
-                        </span>
-                      </div>
-                      <span className={`${rec.isPrimary ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'} text-[10px] px-2 py-0.5 rounded-full shadow-sm font-bold flex items-center gap-1`}>
-                        {rec.routeType}
-                      </span>
-                    </div>
-                    <p className="font-bold text-base md:text-sm mt-1">{rec.name}</p>
-                    <p className={`text-xs mt-1 font-medium ${rec.isPrimary ? 'text-blue-800' : 'text-blue-100'}`}>
-                      {rec.days === Infinity ? 'Hiç gidilmedi' : (rec.days === 0 ? 'Bugün denetlendi' : `${rec.days} gündür gidilmedi`)}
-                    </p>
-                  </div>
-                )) : <p className="text-sm opacity-75 italic py-4">Birim bulunamadı veya rota oluşturulamadı.</p>}
-              </div>
-            </div>
-
             <div className="space-y-4">
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -418,7 +318,7 @@ export default function DenetimTakipApp({ onBack }) {
                           <h3 className="font-bold text-gray-800 text-sm md:text-base truncate">{unit.name}</h3>
                         </div>
                         <p className="text-[11px] md:text-xs text-gray-500 mt-1 flex items-center gap-1 font-medium">
-                          <Calendar size={12} className="shrink-0" /> Son: {unit.lastAudit || 'Kayıt Yok'}
+                          <Calendar size={12} className="shrink-0" /> Son: {formatDateDisplay(unit.lastAudit)}
                         </p>
                       </div>
                     </div>
@@ -432,6 +332,7 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
+        {/* Ana Geçmiş Görünümü */}
         {activeTab === 'history' && (
           <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
             <div className="flex justify-between items-center px-1">
@@ -455,7 +356,7 @@ export default function DenetimTakipApp({ onBack }) {
                           <span className="h-1 w-1 rounded-full bg-gray-300 hidden md:inline"></span>
                           <p className="font-bold text-gray-800 text-sm">{audit.unitName}</p>
                         </div>
-                        <p className="text-xs text-gray-500 font-medium mt-1">{audit.date}</p>
+                        <p className="text-xs text-gray-500 font-medium mt-1">{formatDateDisplay(audit.date)}</p>
                       </div>
                     </div>
                     <button 
@@ -474,51 +375,82 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
+        {/* DENETİM EKLE VE GEÇMİŞİ (BİRLEŞTİRİLMİŞ) */}
         {activeTab === 'addAudit' && (
-          <div className="bg-white p-5 md:p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4 animate-in zoom-in-95 duration-300">
-            <h2 className="text-lg font-bold flex items-center gap-2 text-gray-800 border-b pb-4">
-              <Plus className="text-blue-600" /> Yeni Denetim
-            </h2>
-            <div className="space-y-5 pt-2">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Birim Listesi</label>
-                <select 
-                  className="w-full p-4 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-sm"
-                  value={newAudit.unitId}
-                  onChange={(e) => setNewAudit({...newAudit, unitId: e.target.value})}
-                >
-                  <option value="">Birim Seçiniz...</option>
-                  {[...units].sort((a,b) => {
-                    const c = a.city.localeCompare(b.city, 'tr');
-                    return c !== 0 ? c : a.name.localeCompare(b.name, 'tr');
-                  }).map(u => (
-                    <option key={u.id} value={u.id}>{u.city} {u.district ? `(${u.district})` : ''} - {u.name}</option>
-                  ))}
-                </select>
+          <div className="space-y-6 animate-in zoom-in-95 duration-300">
+            {/* Form Kısmı */}
+            <div className="bg-white p-5 md:p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+              <h2 className="text-lg font-bold flex items-center gap-2 text-gray-800 border-b pb-4">
+                <Plus className="text-blue-600" /> Seri Denetim Ekle
+              </h2>
+              <div className="space-y-5 pt-2">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Birim Listesi</label>
+                  <select 
+                    className="w-full p-4 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-sm"
+                    value={newAudit.unitId}
+                    onChange={(e) => setNewAudit({...newAudit, unitId: e.target.value})}
+                  >
+                    <option value="">Birim Seçiniz...</option>
+                    {[...units].sort((a,b) => {
+                      const c = a.city.localeCompare(b.city, 'tr');
+                      return c !== 0 ? c : a.name.localeCompare(b.name, 'tr');
+                    }).map(u => (
+                      <option key={u.id} value={u.id}>{u.city} {u.district ? `(${u.district})` : ''} - {u.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Tarih</label>
+                  <input 
+                    type="date" 
+                    className="w-full p-4 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-sm"
+                    value={newAudit.date}
+                    onChange={(e) => setNewAudit({...newAudit, date: e.target.value})}
+                  />
+                </div>
+                <div className="flex flex-col md:flex-row gap-3 pt-4">
+                  <button 
+                    onClick={handleAddAudit}
+                    disabled={!newAudit.unitId}
+                    className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition shadow-lg shadow-blue-200 order-1 md:order-2"
+                  >
+                    Kaydı Tamamla
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('dashboard')}
+                    className="w-full md:w-1/3 py-4 rounded-xl border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 transition order-2 md:order-1"
+                  >
+                    İptal
+                  </button>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Tarih</label>
-                <input 
-                  type="date" 
-                  className="w-full p-4 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-sm"
-                  value={newAudit.date}
-                  onChange={(e) => setNewAudit({...newAudit, date: e.target.value})}
-                />
+            </div>
+
+            {/* Geçmiş Kısmı (Ekleme sayfasının altında) */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="p-4 border-b bg-gray-50 flex justify-between items-center font-bold text-gray-700 text-sm">
+                <span className="flex items-center gap-2"><History size={18} className="text-gray-500" /> Son Girilen Denetimler</span>
               </div>
-              <div className="flex flex-col md:flex-row gap-3 pt-4">
-                <button 
-                  onClick={handleAddAudit}
-                  disabled={!newAudit.unitId}
-                  className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition shadow-lg shadow-blue-200 order-1 md:order-2"
-                >
-                  Kaydı Tamamla
-                </button>
-                <button 
-                  onClick={() => setActiveTab('dashboard')}
-                  className="w-full md:w-1/3 py-4 rounded-xl border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 transition order-2 md:order-1"
-                >
-                  İptal
-                </button>
+              <div className="divide-y divide-gray-50 max-h-[300px] overflow-y-auto">
+                {auditHistory.map(audit => (
+                  <div key={audit.id} className="p-4 flex justify-between items-center hover:bg-gray-50 transition">
+                    <div>
+                      <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{audit.unitCity}</p>
+                      <p className="font-bold text-gray-800 text-sm">{audit.unitName}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{formatDateDisplay(audit.date)}</p>
+                    </div>
+                    <button 
+                      onClick={() => handleDeleteAudit(audit.id)}
+                      className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  </div>
+                ))}
+                {audits.length === 0 && (
+                  <div className="p-8 text-center text-gray-400 italic text-sm">Henüz kayıt yok.</div>
+                )}
               </div>
             </div>
           </div>

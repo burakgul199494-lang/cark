@@ -4,7 +4,6 @@ import {
   TrendingUp, History, Filter, RotateCw, ArrowLeft, AlertCircle 
 } from 'lucide-react';
 
-// FİREBASE BAĞLANTILARI (auth eklendi)
 import { db, auth } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, where, getDoc, setDoc } from 'firebase/firestore';
 
@@ -20,21 +19,20 @@ export default function DenetimTakipApp({ onBack }) {
   const [shuffleKey, setShuffleKey] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // FİREBASE'DEN KULLANICIYA ÖZEL VERİLERİ ÇEKME VE VARSAYILANLARI YÜKLEME
+  // SADECE GİRİŞ YAPAN KULLANICININ VERİLERİNİ YÖNET
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!uid) {
-      setErrorMsg("Kullanıcı oturumu bulunamadı!");
+      setErrorMsg("Oturum hatası: Lütfen tekrar giriş yapın.");
       return;
     }
 
-    // 1. ADIM: Varsayılan Birimleri Kontrol Et ve Yükle
+    // 1. Varsayılan Birimleri Sadece İlk Girişte Yükle
     const initializeDefaultUnits = async () => {
       try {
         const flagRef = doc(db, 'user_flags', uid);
         const flagSnap = await getDoc(flagRef);
 
-        // Eğer kullanıcı daha önce bu işlemi yapmadıysa
         if (!flagSnap.exists() || !flagSnap.data().unitsInitialized) {
           const defaultUnits = [
             { city: 'İzmir', district: 'Buca', name: 'Şirinyer' },
@@ -46,44 +44,39 @@ export default function DenetimTakipApp({ onBack }) {
             { city: 'İzmir', district: 'Buca', name: 'Gaziemir' }
           ];
 
-          // Varsayılanları kullanıcının ID'si ile veritabanına yaz
           for (const u of defaultUnits) {
             await addDoc(collection(db, 'units'), { ...u, userId: uid });
           }
 
-          // Tekrar yüklememesi için kullanıcıya damga vur
           await setDoc(flagRef, { unitsInitialized: true }, { merge: true });
         }
       } catch (err) {
-        console.error("Varsayılan birimler yüklenirken hata:", err);
+        console.error("Varsayılan birimler yüklenemedi:", err);
       }
     };
 
     initializeDefaultUnits();
 
-    // 2. ADIM: Sadece bu kullanıcının (userId) verilerini canlı dinle
+    // 2. SADECE BU KULLANICIYA (userId == uid) AİT OLANLARI GETİR
     try {
       const qUnits = query(collection(db, 'units'), where("userId", "==", uid));
       const unsubUnits = onSnapshot(qUnits, (snapshot) => {
         const unitsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setUnits(unitsData);
-      }, (err) => {
-        setErrorMsg("Birimler çekilemedi. Veritabanı kurallarınızı kontrol edin.");
-        console.error(err);
       });
 
       const qAudits = query(collection(db, 'audits'), where("userId", "==", uid));
       const unsubAudits = onSnapshot(qAudits, (snapshot) => {
         const auditsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAudits(auditsData);
-      }, (err) => console.error(err));
+      });
 
       return () => {
         unsubUnits();
         unsubAudits();
       };
     } catch (error) {
-      setErrorMsg("Firebase bağlantı hatası!");
+      setErrorMsg("Bağlantı hatası veya yetki reddedildi!");
     }
   }, []);
 
@@ -114,16 +107,17 @@ export default function DenetimTakipApp({ onBack }) {
     return `${days} Gün (Acil)`;
   };
 
-  // İŞLEMLER (Kullanıcı kimliği (userId) eklenerek kayıt ediliyor)
+  // İŞLEMLER (Her kayıt kimliğe özel atılır)
   const handleAddUnit = async () => {
-    if (newUnit.city && newUnit.name && newUnit.district) {
+    const uid = auth.currentUser?.uid;
+    if (newUnit.city && newUnit.name && newUnit.district && uid) {
       try {
         setErrorMsg('');
         await addDoc(collection(db, 'units'), {
           city: newUnit.city.trim(),
           district: newUnit.district.trim(),
           name: newUnit.name.trim(),
-          userId: auth.currentUser.uid // Kullanıcıya zimmetle
+          userId: uid
         });
         setNewUnit({ city: '', district: '', name: '' });
         setActiveTab('dashboard');
@@ -144,13 +138,14 @@ export default function DenetimTakipApp({ onBack }) {
   };
 
   const handleAddAudit = async () => {
-    if (newAudit.unitId && newAudit.date) {
+    const uid = auth.currentUser?.uid;
+    if (newAudit.unitId && newAudit.date && uid) {
       try {
         setErrorMsg('');
         await addDoc(collection(db, 'audits'), { 
           unitId: newAudit.unitId, 
           date: newAudit.date,
-          userId: auth.currentUser.uid // Kullanıcıya zimmetle
+          userId: uid
         });
         setActiveTab('dashboard');
       } catch (error) { setErrorMsg(`Kaydedilemedi: ${error.message}`); }
@@ -198,7 +193,6 @@ export default function DenetimTakipApp({ onBack }) {
     return [...new Set(units.map(u => u.city))].sort((a, b) => a.localeCompare(b, 'tr'));
   }, [units]);
 
-  // ROTA ALGORİTMASI (İlçe/Bölge Bazlı Kümeleme)
   const recommendations = useMemo(() => {
     if (units.length === 0) return [];
     

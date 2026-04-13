@@ -12,6 +12,7 @@ import AnaSayfa from './AnaSayfa';
 // Sadece İş Modülleri Kaldı
 import ShipmentApp from './components/ShipmentApp';
 import SktControlApp from './components/SktControlApp';
+import DenetimTakipApp from './components/DenetimTakipApp'; // YENİ EKLENEN MODÜL
 
 export default function App() {
   return (
@@ -120,9 +121,10 @@ function GameContent() {
           {/* Anasayfa Rotası */}
           <Route path="/" element={<AnaSayfa />} />
           
-          {/* Sadece İş Modülleri */}
+          {/* İş Modülleri */}
           <Route path="/sevkiyat" element={<ShipmentApp onBack={() => navigate('/')} />} />
           <Route path="/skt-kontrol" element={<SktControlApp onBack={() => navigate('/')} />} />
+          <Route path="/denetim" element={<DenetimTakipApp onBack={() => navigate('/')} />} />
         </Routes>
       </div>
     </div>

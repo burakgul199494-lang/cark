@@ -27,24 +27,68 @@ export default function DenetimTakipApp({ onBack }) {
       return;
     }
 
-    // 1. ADIM: Varsayılan Birimleri Yükle (Eski karışıklığı önlemek için yeni flag tablosu kullanıyoruz)
+    // 1. ADIM: 51 Birimlik Gerçek Listeyi Varsayılan Olarak Yükle
     const initializeDefaultUnits = async () => {
       try {
         const flagRef = doc(db, 'kullanici_ayarlari', uid);
         const flagSnap = await getDoc(flagRef);
 
         if (!flagSnap.exists() || !flagSnap.data().baslangicBirimleriEklendi) {
+          // Bize ilettiğin 51 birimlik tam liste
           const defaultUnits = [
-            { city: 'İzmir', district: 'Buca', name: 'Şirinyer' },
-            { city: 'İzmir', district: 'Buca', name: 'Buca' },
-            { city: 'İzmir', district: 'Buca', name: 'Tınaztepe' },
-            { city: 'İzmir', district: 'Buca', name: 'Evka' },
-            { city: 'İzmir', district: 'Buca', name: 'Kuruçeşme' },
-            { city: 'İzmir', district: 'Buca', name: 'Fırat' },
-            { city: 'İzmir', district: 'Gaziemir', name: 'Gaziemir' }
+            { city: 'Aydın', district: 'Didim', name: 'Didim' },
+            { city: 'Aydın', district: 'Didim', name: 'Didim Akbük' },
+            { city: 'Aydın', district: 'Didim', name: 'Didim Çarşı' },
+            { city: 'Aydın', district: 'İncirliova', name: 'İncirliova' },
+            { city: 'Aydın', district: 'Kuşadası', name: 'Kuşadası' },
+            { city: 'Aydın', district: 'Kuşadası', name: 'Kuşadası Davutlar' },
+            { city: 'Aydın', district: 'Kuşadası', name: 'Kuşadası Flora' },
+            { city: 'Aydın', district: 'Efeler', name: 'Merkez' },
+            { city: 'Aydın', district: 'Efeler', name: 'Mimar Sinan' },
+            { city: 'Aydın', district: 'Nazilli', name: 'Nazilli' },
+            { city: 'Aydın', district: 'Söke', name: 'Söke' },
+            { city: 'Aydın', district: 'Söke', name: 'Söke Cumhuriyet' },
+            { city: 'Aydın', district: 'Aydın Merkez', name: 'Zeybek' },
+            { city: 'Denizli', district: 'Merkezefendi', name: 'Albayrak' },
+            { city: 'Denizli', district: 'Pamukkale', name: 'Bağbaşı' },
+            { city: 'Denizli', district: 'Denizli Merkez', name: 'Çamlık' },
+            { city: 'Denizli', district: 'Merkezefendi', name: 'Çaybaşı' },
+            { city: 'Denizli', district: 'Merkezefendi', name: 'Servergazi' },
+            { city: 'Denizli', district: 'Merkezefendi', name: 'Yenişafak' },
+            { city: 'İzmir', district: 'Çeşme', name: 'Alaçatı' },
+            { city: 'İzmir', district: 'Torbalı', name: 'Ayrancılar' },
+            { city: 'İzmir', district: 'Balçova', name: 'Balçova' },
+            { city: 'İzmir', district: 'Çeşme', name: 'Çeşme' },
+            { city: 'İzmir', district: 'Buca', name: 'Fırat Mahallesi' },
+            { city: 'İzmir', district: 'Konak', name: 'Göztepe' },
+            { city: 'İzmir', district: 'Güzelbahçe', name: 'Güzelbahçe' },
+            { city: 'İzmir', district: 'Konak', name: 'Hatay' },
+            { city: 'İzmir', district: 'Karabağlar', name: 'Karabağlar' },
+            { city: 'İzmir', district: 'Kemalpaşa', name: 'Kemalpaşa' },
+            { city: 'İzmir', district: 'Menderes', name: 'Menderes' },
+            { city: 'İzmir', district: 'Narlıdere', name: 'Narlıdere' },
+            { city: 'İzmir', district: 'Ödemiş', name: 'Ödemiş' },
+            { city: 'İzmir', district: 'Menderes', name: 'Özdere' },
+            { city: 'İzmir', district: 'Seferihisar', name: 'Seferihisar' },
+            { city: 'İzmir', district: 'Selçuk', name: 'Selçuk' },
+            { city: 'İzmir', district: 'Torbalı', name: 'Torbalı' },
+            { city: 'İzmir', district: 'Torbalı', name: 'Torbalı Alpkent' },
+            { city: 'İzmir', district: 'Konak', name: 'Üçyol' },
+            { city: 'İzmir', district: 'Kemalpaşa', name: 'Ulucak' },
+            { city: 'İzmir', district: 'Seferihisar', name: 'Ürkmez' },
+            { city: 'İzmir', district: 'Urla', name: 'Urla' },
+            { city: 'İzmir', district: 'Karabağlar', name: 'Yeşilyurt' },
+            { city: 'Manisa', district: 'Saruhanlı', name: 'Saruhanlı' },
+            { city: 'Muğla', district: 'Bodrum', name: 'Gümbet' },
+            { city: 'Muğla', district: 'Bodrum', name: 'Ortakent' },
+            { city: 'Muğla', district: 'Milas', name: 'Milas' },
+            { city: 'Muğla', district: 'Menteşe', name: 'Mumcular' },
+            { city: 'Muğla', district: 'Milas', name: 'Ören' },
+            { city: 'Muğla', district: 'Bodrum', name: 'Turgutreis' },
+            { city: 'Muğla', district: 'Bodrum', name: 'Yalıkavak' },
+            { city: 'Muğla', district: 'Yatağan', name: 'Yatağan' }
           ];
 
-          // Yeni 'bireysel_birimler' tablosuna yazıyoruz
           for (const u of defaultUnits) {
             await addDoc(collection(db, 'bireysel_birimler'), { ...u, userId: uid });
           }
@@ -59,7 +103,7 @@ export default function DenetimTakipApp({ onBack }) {
 
     initializeDefaultUnits();
 
-    // 2. ADIM: YENİ TABLOLARDAN CANLI VERİ ÇEK ('units' yerine 'bireysel_birimler' kullanıyoruz)
+    // 2. ADIM: YENİ TABLOLARDAN CANLI VERİ ÇEK 
     try {
       const qUnits = query(collection(db, 'bireysel_birimler'), where("userId", "==", uid));
       const unsubUnits = onSnapshot(qUnits, (snapshot) => {
@@ -109,7 +153,7 @@ export default function DenetimTakipApp({ onBack }) {
     return `${days} Gün (Acil)`;
   };
 
-  // İŞLEMLER (Yeni tablolara işlem yapılıyor)
+  // İŞLEMLER
   const handleAddUnit = async () => {
     const uid = auth.currentUser?.uid;
     if (newUnit.city && newUnit.name && newUnit.district && uid) {

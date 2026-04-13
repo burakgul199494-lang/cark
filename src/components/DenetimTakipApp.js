@@ -19,7 +19,7 @@ export default function DenetimTakipApp({ onBack }) {
   const [shuffleKey, setShuffleKey] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // SADECE GİRİŞ YAPAN KULLANICININ VERİLERİNİ YÖNET
+  // SADECE GİRİŞ YAPAN KULLANICIYI DİNLE (Yeni Tablolarla)
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!uid) {
@@ -27,13 +27,13 @@ export default function DenetimTakipApp({ onBack }) {
       return;
     }
 
-    // 1. Varsayılan Birimleri Sadece İlk Girişte Yükle
+    // 1. ADIM: Varsayılan Birimleri Yükle (Eski karışıklığı önlemek için yeni flag tablosu kullanıyoruz)
     const initializeDefaultUnits = async () => {
       try {
-        const flagRef = doc(db, 'user_flags', uid);
+        const flagRef = doc(db, 'kullanici_ayarlari', uid);
         const flagSnap = await getDoc(flagRef);
 
-        if (!flagSnap.exists() || !flagSnap.data().unitsInitialized) {
+        if (!flagSnap.exists() || !flagSnap.data().baslangicBirimleriEklendi) {
           const defaultUnits = [
             { city: 'İzmir', district: 'Buca', name: 'Şirinyer' },
             { city: 'İzmir', district: 'Buca', name: 'Buca' },
@@ -41,14 +41,16 @@ export default function DenetimTakipApp({ onBack }) {
             { city: 'İzmir', district: 'Buca', name: 'Evka' },
             { city: 'İzmir', district: 'Buca', name: 'Kuruçeşme' },
             { city: 'İzmir', district: 'Buca', name: 'Fırat' },
-            { city: 'İzmir', district: 'Buca', name: 'Gaziemir' }
+            { city: 'İzmir', district: 'Gaziemir', name: 'Gaziemir' }
           ];
 
+          // Yeni 'bireysel_birimler' tablosuna yazıyoruz
           for (const u of defaultUnits) {
-            await addDoc(collection(db, 'units'), { ...u, userId: uid });
+            await addDoc(collection(db, 'bireysel_birimler'), { ...u, userId: uid });
           }
 
-          await setDoc(flagRef, { unitsInitialized: true }, { merge: true });
+          // İşaretle ki sayfayı yenileyince tekrar yükleyip sildiklerini geri getirmesin
+          await setDoc(flagRef, { baslangicBirimleriEklendi: true }, { merge: true });
         }
       } catch (err) {
         console.error("Varsayılan birimler yüklenemedi:", err);
@@ -57,15 +59,15 @@ export default function DenetimTakipApp({ onBack }) {
 
     initializeDefaultUnits();
 
-    // 2. SADECE BU KULLANICIYA (userId == uid) AİT OLANLARI GETİR
+    // 2. ADIM: YENİ TABLOLARDAN CANLI VERİ ÇEK ('units' yerine 'bireysel_birimler' kullanıyoruz)
     try {
-      const qUnits = query(collection(db, 'units'), where("userId", "==", uid));
+      const qUnits = query(collection(db, 'bireysel_birimler'), where("userId", "==", uid));
       const unsubUnits = onSnapshot(qUnits, (snapshot) => {
         const unitsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setUnits(unitsData);
       });
 
-      const qAudits = query(collection(db, 'audits'), where("userId", "==", uid));
+      const qAudits = query(collection(db, 'bireysel_denetimler'), where("userId", "==", uid));
       const unsubAudits = onSnapshot(qAudits, (snapshot) => {
         const auditsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAudits(auditsData);
@@ -107,13 +109,13 @@ export default function DenetimTakipApp({ onBack }) {
     return `${days} Gün (Acil)`;
   };
 
-  // İŞLEMLER (Her kayıt kimliğe özel atılır)
+  // İŞLEMLER (Yeni tablolara işlem yapılıyor)
   const handleAddUnit = async () => {
     const uid = auth.currentUser?.uid;
     if (newUnit.city && newUnit.name && newUnit.district && uid) {
       try {
         setErrorMsg('');
-        await addDoc(collection(db, 'units'), {
+        await addDoc(collection(db, 'bireysel_birimler'), {
           city: newUnit.city.trim(),
           district: newUnit.district.trim(),
           name: newUnit.name.trim(),
@@ -132,7 +134,7 @@ export default function DenetimTakipApp({ onBack }) {
   const handleDeleteUnit = async (id) => {
     if(window.confirm('Bu birimi silmek istediğinize emin misiniz?')) {
       try {
-        await deleteDoc(doc(db, 'units', id));
+        await deleteDoc(doc(db, 'bireysel_birimler', id));
       } catch (error) { setErrorMsg(`Silinemedi: ${error.message}`); }
     }
   };
@@ -142,7 +144,7 @@ export default function DenetimTakipApp({ onBack }) {
     if (newAudit.unitId && newAudit.date && uid) {
       try {
         setErrorMsg('');
-        await addDoc(collection(db, 'audits'), { 
+        await addDoc(collection(db, 'bireysel_denetimler'), { 
           unitId: newAudit.unitId, 
           date: newAudit.date,
           userId: uid
@@ -154,7 +156,7 @@ export default function DenetimTakipApp({ onBack }) {
 
   const handleDeleteAudit = async (id) => {
     if(window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) {
-      try { await deleteDoc(doc(db, 'audits', id)); } 
+      try { await deleteDoc(doc(db, 'bireysel_denetimler', id)); } 
       catch (error) { setErrorMsg(`Silinemedi: ${error.message}`); }
     }
   };

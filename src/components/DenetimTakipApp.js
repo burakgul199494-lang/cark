@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Plus, Trash2, Search, CheckCircle2, MapPin, 
-  TrendingUp, History, Filter, RotateCw, ArrowLeft 
+  TrendingUp, History, Filter, RotateCw, ArrowLeft, AlertCircle 
 } from 'lucide-react';
 
-// FİREBASE BAĞLANTISI EKLENDİ
+// FİREBASE BAĞLANTISI
 import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 
 export default function DenetimTakipApp({ onBack }) {
-  // State yönetimi (Artık boş başlıyor, Firebase'den dolacak)
   const [units, setUnits] = useState([]);
   const [audits, setAudits] = useState([]);
 
@@ -19,38 +18,45 @@ export default function DenetimTakipApp({ onBack }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCityForRec, setSelectedCityForRec] = useState('');
   const [shuffleKey, setShuffleKey] = useState(0);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  // FİREBASE'DEN VERİLERİ ÇEKME (Canlı Dinleme)
+  // FİREBASE'DEN VERİLERİ ÇEKME
   useEffect(() => {
-    const unsubUnits = onSnapshot(collection(db, 'units'), (snapshot) => {
-      const unitsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setUnits(unitsData);
-    });
+    try {
+      const unsubUnits = onSnapshot(collection(db, 'units'), (snapshot) => {
+        const unitsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setUnits(unitsData);
+      }, (err) => {
+        setErrorMsg("Birimler çekilemedi. Veritabanı kurallarınızı kontrol edin.");
+        console.error(err);
+      });
 
-    const unsubAudits = onSnapshot(collection(db, 'audits'), (snapshot) => {
-      const auditsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setAudits(auditsData);
-    });
+      const unsubAudits = onSnapshot(collection(db, 'audits'), (snapshot) => {
+        const auditsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setAudits(auditsData);
+      }, (err) => {
+        console.error(err);
+      });
 
-    return () => {
-      unsubUnits();
-      unsubAudits();
-    };
+      return () => {
+        unsubUnits();
+        unsubAudits();
+      };
+    } catch (error) {
+      setErrorMsg("Firebase bağlantı hatası!");
+    }
   }, []);
 
-  // Yardımcı: Geçen gün sayısını hesapla
   const getDaysPassed = (lastDate) => {
     if (!lastDate) return Infinity;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const auditDate = new Date(lastDate);
     auditDate.setHours(0, 0, 0, 0);
-    
     const diffTime = today - auditDate;
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  // Renk Skalası
   const getStatusColor = (days) => {
     if (days === Infinity) return 'bg-gray-100 text-gray-500 border-gray-200';
     if (days <= 15) return 'bg-green-100 text-green-700 border-green-200';
@@ -69,37 +75,55 @@ export default function DenetimTakipApp({ onBack }) {
     return `${days} Gün (Acil)`;
   };
 
-  // İŞLEMLER (Firebase'e yazma ve silme)
+  // İŞLEMLER (Try-Catch eklendi)
   const handleAddUnit = async () => {
     if (newUnit.city && newUnit.name) {
-      await addDoc(collection(db, 'units'), {
-        city: newUnit.city,
-        name: newUnit.name
-      });
-      setNewUnit({ city: '', name: '' });
-      setActiveTab('dashboard');
+      try {
+        setErrorMsg('');
+        await addDoc(collection(db, 'units'), {
+          city: newUnit.city.trim(),
+          name: newUnit.name.trim()
+        });
+        setNewUnit({ city: '', name: '' });
+        setActiveTab('dashboard');
+      } catch (error) {
+        setErrorMsg(`Kaydedilemedi: ${error.message}`);
+      }
     }
   };
 
   const handleDeleteUnit = async (id) => {
     if(window.confirm('Bu birimi silmek istediğinize emin misiniz?')) {
-      await deleteDoc(doc(db, 'units', id));
+      try {
+        await deleteDoc(doc(db, 'units', id));
+      } catch (error) {
+        setErrorMsg(`Silinemedi: ${error.message}`);
+      }
     }
   };
 
   const handleAddAudit = async () => {
     if (newAudit.unitId && newAudit.date) {
-      await addDoc(collection(db, 'audits'), {
-        unitId: newAudit.unitId,
-        date: newAudit.date
-      });
-      setActiveTab('dashboard');
+      try {
+        setErrorMsg('');
+        await addDoc(collection(db, 'audits'), {
+          unitId: newAudit.unitId,
+          date: newAudit.date
+        });
+        setActiveTab('dashboard');
+      } catch (error) {
+        setErrorMsg(`Kaydedilemedi: ${error.message}`);
+      }
     }
   };
 
   const handleDeleteAudit = async (id) => {
     if(window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) {
-      await deleteDoc(doc(db, 'audits', id));
+      try {
+        await deleteDoc(doc(db, 'audits', id));
+      } catch (error) {
+        setErrorMsg(`Silinemedi: ${error.message}`);
+      }
     }
   };
 
@@ -141,39 +165,39 @@ export default function DenetimTakipApp({ onBack }) {
     return [...new Set(cities)].sort((a, b) => a.localeCompare(b, 'tr'));
   }, [units]);
 
+  // AKILLI MANTIKSAL ROTA ALGORİTMASI
   const recommendations = useMemo(() => {
     if (units.length === 0) return [];
-    let baseUnits = [...unitStats];
+    
+    // 1. Tüm birimleri gecikme süresine göre en acilden en rahata doğru sırala
+    let baseUnits = [...unitStats].sort((a, b) => {
+      if (a.days === Infinity) return -1;
+      if (b.days === Infinity) return 1;
+      return b.days - a.days;
+    });
 
+    // 2. Eğer kullanıcı bir il seçtiyse sadece o ili filtrele
     if (selectedCityForRec) {
-      const cityCandidates = baseUnits
-        .filter(u => u.city === selectedCityForRec)
-        .sort((a, b) => {
-          if (a.days === Infinity) return -1;
-          if (b.days === Infinity) return 1;
-          return b.days - a.days;
-        });
-      if (cityCandidates.length === 0) return [];
-      const poolSize = Math.min(cityCandidates.length, 3);
-      const randomIndex = (shuffleKey) % poolSize;
-      const primary = cityCandidates.splice(randomIndex, 1)[0];
-      return [primary, ...cityCandidates].slice(0, 3);
-    } else {
-      const globalCandidates = baseUnits.sort((a, b) => {
-        if (a.days === Infinity) return -1;
-        if (b.days === Infinity) return 1;
-        return b.days - a.days;
-      });
-      if (globalCandidates.length === 0) return [];
-      const poolSize = Math.min(globalCandidates.length, 5);
-      const randomIndex = (shuffleKey) % poolSize;
-      const primaryTarget = globalCandidates[randomIndex];
-
-      const sameCityUnits = baseUnits
-        .filter(u => u.city === primaryTarget.city && u.id !== primaryTarget.id)
-        .sort((a, b) => (shuffleKey % 2 === 0 ? b.days - a.days : a.days - b.days));
-      return [primaryTarget, ...sameCityUnits].slice(0, 3);
+      baseUnits = baseUnits.filter(u => u.city === selectedCityForRec);
     }
+
+    if (baseUnits.length === 0) return [];
+
+    // 3. İlk 3 acil birimden birini (şans faktörüyle) "Ana Hedef" olarak belirle
+    const poolSize = Math.min(baseUnits.length, 3);
+    const randomIndex = (shuffleKey) % poolSize;
+    const primaryTarget = baseUnits[randomIndex];
+
+    // 4. Ana hedefin bulunduğu İL'deki DİĞER en acil birimleri bul (Yol Üstü hedefleri)
+    const sameCityOthers = baseUnits
+      .filter(u => u.city === primaryTarget.city && u.id !== primaryTarget.id)
+      .slice(0, 2); // En fazla 2 tane yol üstü hedefi al
+
+    // 5. Birleştir ve geri dön
+    return [
+      { ...primaryTarget, routeType: 'Ana Hedef', isPrimary: true },
+      ...sameCityOthers.map(u => ({ ...u, routeType: 'Yol Üstü', isPrimary: false }))
+    ];
   }, [unitStats, selectedCityForRec, shuffleKey]);
 
   return (
@@ -185,6 +209,13 @@ export default function DenetimTakipApp({ onBack }) {
           <ArrowLeft size={20} className="mr-1" /> Menü
         </button>
       </div>
+
+      {errorMsg && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-lg flex items-center gap-3">
+          <AlertCircle className="text-red-500 shrink-0" size={24} />
+          <p className="text-sm font-medium text-red-700">{errorMsg}</p>
+        </div>
+      )}
 
       <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm mb-4 md:mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
         <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2 text-gray-800 w-full md:w-auto justify-center md:justify-start">
@@ -200,7 +231,6 @@ export default function DenetimTakipApp({ onBack }) {
       </div>
 
       <div className="space-y-4 md:space-y-6">
-        {/* MOBİL UYUMLU NAVİGASYON (Grid yapısına geçirildi) */}
         <div className="grid grid-cols-3 bg-white p-1.5 rounded-xl shadow-sm border gap-1">
           <button 
             onClick={() => setActiveTab('dashboard')}
@@ -222,20 +252,20 @@ export default function DenetimTakipApp({ onBack }) {
           </button>
         </div>
 
-        {/* Dashboard Görünümü */}
         {activeTab === 'dashboard' && (
           <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
-            {/* Öneriler Kartı */}
+            {/* Akıllı Rota Kartı */}
             <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl p-5 md:p-6 text-white shadow-lg relative overflow-hidden">
               <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                <TrendingUp size={100} />
+                <MapPin size={100} />
               </div>
               
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 relative z-10">
                 <div>
                   <h2 className="text-lg font-bold flex items-center gap-2">
-                    <TrendingUp size={20} /> Bugün Nereye Gitmeliyim?
+                    <TrendingUp size={20} /> Mantıksal Rota Önerisi
                   </h2>
+                  <p className="text-xs text-blue-100 mt-1">Konum ve aciliyete göre optimize edilmiştir.</p>
                 </div>
                 
                 <div className="flex items-center justify-between gap-2">
@@ -266,21 +296,24 @@ export default function DenetimTakipApp({ onBack }) {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 relative z-10">
                 {recommendations.length > 0 ? recommendations.map((rec, idx) => (
-                  <div key={`${rec.id}-${shuffleKey}`} className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-xl hover:bg-white/20 transition cursor-default">
+                  <div key={`${rec.id}-${shuffleKey}`} className={`backdrop-blur-md border p-4 rounded-xl transition cursor-default ${rec.isPrimary ? 'bg-white text-blue-900 border-white' : 'bg-white/10 border-white/20 hover:bg-white/20'}`}>
                     <div className="flex justify-between items-start mb-2">
-                      <span className="text-[11px] font-bold uppercase text-blue-200">{rec.city}</span>
-                      {idx === 0 && <span className="bg-red-500 text-[10px] px-2 py-0.5 rounded-full shadow-sm font-bold">Öncelikli</span>}
+                      <span className={`text-[11px] font-bold uppercase ${rec.isPrimary ? 'text-blue-600' : 'text-blue-200'}`}>
+                        {rec.city}
+                      </span>
+                      <span className={`${rec.isPrimary ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'} text-[10px] px-2 py-0.5 rounded-full shadow-sm font-bold flex items-center gap-1`}>
+                        {rec.isPrimary ? '📍 Ana Hedef' : '🚗 Yol Üstü'}
+                      </span>
                     </div>
                     <p className="font-bold text-base md:text-sm">{rec.name}</p>
-                    <p className="text-xs text-blue-100 mt-1 font-medium">
+                    <p className={`text-xs mt-1 font-medium ${rec.isPrimary ? 'text-blue-800' : 'text-blue-100'}`}>
                       {rec.days === Infinity ? 'Hiç gidilmedi' : (rec.days === 0 ? 'Bugün denetlendi' : `${rec.days} gündür gidilmedi`)}
                     </p>
                   </div>
-                )) : <p className="text-sm opacity-75 italic py-4">Uygun birim bulunamadı.</p>}
+                )) : <p className="text-sm opacity-75 italic py-4">Birim bulunamadı veya rota oluşturulamadı.</p>}
               </div>
             </div>
 
-            {/* Arama ve Liste */}
             <div className="space-y-4">
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -320,7 +353,6 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
-        {/* Denetim Geçmişi Görünümü */}
         {activeTab === 'history' && (
           <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
             <div className="flex justify-between items-center px-1">
@@ -365,7 +397,6 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
-        {/* Denetim Ekle Görünümü (Form alanları büyütüldü) */}
         {activeTab === 'addAudit' && (
           <div className="bg-white p-5 md:p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4 animate-in zoom-in-95 duration-300">
             <h2 className="text-lg font-bold flex items-center gap-2 text-gray-800 border-b pb-4">
@@ -416,7 +447,6 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
-        {/* Birim Yönetimi Görünümü */}
         {activeTab === 'units' && (
           <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
             <div className="bg-white p-5 md:p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
@@ -476,7 +506,6 @@ export default function DenetimTakipApp({ onBack }) {
 
       </div>
 
-      {/* Renk Skalası Alt Bilgi (Mobilde Scroll eklendi) */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t p-3 px-4 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] z-40 overflow-x-auto no-scrollbar">
         <div className="flex justify-start md:justify-center gap-4 min-w-max pb-1">
           <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-bold text-gray-600">

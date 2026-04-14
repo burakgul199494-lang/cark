@@ -93,7 +93,6 @@ const TURKEY_DATA = {
   "Düzce": ["Akçakoca", "Cumayeri", "Çilimli", "Gölyaka", "Gümüşova", "Kaynaşlı", "Merkez", "Yığılca"]
 };
 
-// Yerel saat dilimine göre YYYY-MM-DD formatında tarihi almak için yardımcı fonksiyon
 const getLocalYYYYMMDD = (dateObj = new Date()) => {
   const d = new Date(dateObj);
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -115,6 +114,10 @@ export default function DenetimTakipApp({ onBack }) {
   // DENETİM NOT MODALI İÇİN STATE
   const [pendingAudit, setPendingAudit] = useState(null);
   const [pendingAuditNote, setPendingAuditNote] = useState('');
+
+  // HIZLI PLANLAMA MODALI İÇİN STATE
+  const [quickPlanUnit, setQuickPlanUnit] = useState(null);
+  const [quickPlanDate, setQuickPlanDate] = useState(getLocalYYYYMMDD());
   
   // FİLTRELEME DURUMLARI
   const [urgencyFilter, setUrgencyFilter] = useState('all'); 
@@ -354,7 +357,6 @@ export default function DenetimTakipApp({ onBack }) {
     }
   };
 
-  // BUGÜN GİDİLDİ BUG'I ÇÖZÜMÜ
   const handleQuickAddAudit = (unitId, e) => {
     e.stopPropagation();
     const today = getLocalYYYYMMDD();
@@ -364,7 +366,6 @@ export default function DenetimTakipApp({ onBack }) {
         setErrorMsg('Bu şubeye bugün zaten gidildi!');
         return;
       }
-      // Planda varsa tespit et, pendingAudit'e planId'yi ver ki kaydedilince planı silsin.
       const existingPlan = plans.find(p => p.unitId === unitId && p.date === today);
       setPendingAudit({ unitId: unitId, date: today, planId: existingPlan?.id, step: 'ask' });
     }
@@ -553,7 +554,6 @@ export default function DenetimTakipApp({ onBack }) {
     });
   }, [plans, units]);
 
-  // TÜM NOTLARI HAZIRLA (YENİ ÖZELLİK)
   const allNotesData = useMemo(() => {
     let all = [];
     units.forEach(u => {
@@ -691,6 +691,44 @@ export default function DenetimTakipApp({ onBack }) {
                      </div>
                   </div>
                )}
+            </div>
+         </div>
+      )}
+
+      {/* --- HIZLI PLANLAMA MODALI --- */}
+      {quickPlanUnit && (
+         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 p-6 text-center">
+              <div className="w-16 h-16 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CalendarPlus size={32} />
+              </div>
+              <h3 className="font-bold text-lg text-gray-800 mb-2">Hızlı Planlama</h3>
+              <p className="text-sm text-gray-500 mb-4"><strong>{quickPlanUnit.name}</strong> şubesi için plan tarihi seçin:</p>
+              
+              <input 
+                type="date" 
+                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 mb-6"
+                value={quickPlanDate}
+                onChange={(e) => setQuickPlanDate(e.target.value)}
+              />
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setQuickPlanUnit(null)} 
+                  className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold active:bg-gray-200 transition"
+                >
+                  İptal
+                </button>
+                <button 
+                  onClick={async () => {
+                    const success = await handleAddPlan(quickPlanUnit.id, quickPlanDate);
+                    if (success) setQuickPlanUnit(null);
+                  }} 
+                  className="flex-1 py-3 bg-purple-600 text-white rounded-xl text-sm font-bold active:bg-purple-700 transition shadow-md shadow-purple-200"
+                >
+                  Planla
+                </button>
+              </div>
             </div>
          </div>
       )}
@@ -846,15 +884,27 @@ export default function DenetimTakipApp({ onBack }) {
                     
                     {/* SAĞ TARAF: Butonlar */}
                     <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusColor(unit.days)} text-center`}>
+                      <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusColor(unit.days)} text-center w-full`}>
                         {getStatusLabel(unit.days)}
                       </div>
-                      <button 
-                        onClick={(e) => handleQuickAddAudit(unit.id, e)}
-                        className="flex items-center gap-1 text-[10px] font-bold bg-blue-50 text-blue-600 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors whitespace-nowrap"
-                      >
-                        <Zap size={12} className="fill-blue-600" /> Bugün Gidildi
-                      </button>
+                      <div className="flex gap-1">
+                         <button 
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             setQuickPlanUnit(unit);
+                             setQuickPlanDate(getLocalYYYYMMDD());
+                           }}
+                           className="flex items-center gap-1 text-[10px] font-bold bg-purple-50 text-purple-600 px-2 py-1.5 rounded-lg active:bg-purple-100 transition-colors whitespace-nowrap"
+                         >
+                           <CalendarPlus size={12} /> Planla
+                         </button>
+                         <button 
+                           onClick={(e) => handleQuickAddAudit(unit.id, e)}
+                           className="flex items-center gap-1 text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-1.5 rounded-lg active:bg-blue-100 transition-colors whitespace-nowrap"
+                         >
+                           <Zap size={12} className="fill-blue-600" /> Gidildi
+                         </button>
+                      </div>
                     </div>
                   </div>
 
@@ -916,6 +966,8 @@ export default function DenetimTakipApp({ onBack }) {
         {/* HAFTALIK SHIFT / TÜM PLANLAR EKRANI */}
         {activeTab === 'weeklyPlans' && (
           <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Gelecek Planlar</h2>
+            
             {plans.length === 0 ? (
               <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">
                 Henüz yapılmış bir planınız bulunmuyor.

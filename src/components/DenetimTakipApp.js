@@ -439,6 +439,14 @@ export default function DenetimTakipApp({ onBack }) {
     const uid = auth.currentUser?.uid;
     if (!unitId || !date || !uid) return false;
     
+    // KURAL 1: Seçilen tarihte zaten gidilmiş mi kontrolü (YENİ EKLENDİ)
+    const isAlreadyVisited = audits.some(a => a.unitId === unitId && a.date === date);
+    if (isAlreadyVisited) {
+        setErrorMsg('Bu şubeye seçilen tarihte zaten gidilmiş!');
+        return false;
+    }
+
+    // KURAL 2: Seçilen tarihte zaten bir plan var mı kontrolü
     const isAlreadyPlanned = plans.some(p => p.unitId === unitId && p.date === date);
     if (isAlreadyPlanned) {
         setErrorMsg('Bu şubeye bu tarih için zaten bir plan var!');

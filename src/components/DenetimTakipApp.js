@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Plus, Trash2, Search, CheckCircle2, MapPin, 
-  History, ArrowLeft, AlertCircle, List, Settings, Edit, 
-  Dna, Zap, FileText, X, ChevronRight, Shuffle, CalendarPlus, CalendarDays, Check, AlertTriangle
+  History, ArrowLeft, AlertCircle, List, Settings, 
+  Dna, Zap, FileText, X, Shuffle, CalendarPlus, CalendarDays, Check, AlertTriangle
 } from 'lucide-react';
 
 import { db, auth } from '../firebase';
@@ -18,7 +18,7 @@ const TURKEY_DATA = {
   "Ankara": ["Akyurt", "Altındağ", "Ayaş", "Bala", "Beypazarı", "Çamlıdere", "Çankaya", "Çubuk", "Elmadağ", "Etimesgut", "Evren", "Gölbaşı", "Güdül", "Haymana", "Kahramankazan", "Kalecik", "Keçiören", "Kızılcahamam", "Mamak", "Nallıhan", "Polatlı", "Pursaklar", "Sincan", "Şereflikoçhisar", "Yenimahalle"],
   "Antalya": ["Akseki", "Aksu", "Alanya", "Demre", "Döşemealtı", "Elmalı", "Finike", "Gazipaşa", "Gündoğmuş", "İbradı", "Kaş", "Kemer", "Kepez", "Konyaaltı", "Korkuteli", "Kumluca", "Manavgat", "Muratpaşa", "Serik"],
   "Artvin": ["Ardanuç", "Arhavi", "Borçka", "Hopa", "Kemalpaşa", "Merkez", "Murgul", "Şavşat", "Yusufeli"],
-  "Aydın": ["Bozdoğan", "Buharkent", "Çine", "Didim", "Efeler", "Germencik", "İncirliova", "Karacasu", "Karpuzlu", "Koçarlı", "Köşk", "Kuşadası", "Kuyucak", "Nazilli", "Söke", "Sultanhisar", "Yenipazar"],
+  "Aydın": ["Aydın Merkez", "Bozdoğan", "Buharkent", "Çine", "Didim", "Efeler", "Germencik", "İncirliova", "Karacasu", "Karpuzlu", "Koçarlı", "Köşk", "Kuşadası", "Kuyucak", "Nazilli", "Söke", "Sultanhisar", "Yenipazar"],
   "Balıkesir": ["Altıeylül", "Ayvalık", "Balya", "Bandırma", "Bigadiç", "Burhaniye", "Dursunbey", "Edremit", "Erdek", "Gömeç", "Gönen", "Havran", "İvrindi", "Karesi", "Kepsut", "Manyas", "Marmara", "Savaştepe", "Sındırgı", "Susurluk"],
   "Bilecik": ["Bozüyük", "Gölpazarı", "İnhisar", "Merkez", "Osmaneli", "Pazaryeri", "Söğüt", "Yenipazar"],
   "Bingöl": ["Adaklı", "Genç", "Karlıova", "Kiğı", "Merkez", "Solhan", "Yayladere", "Yedisu"],
@@ -29,7 +29,7 @@ const TURKEY_DATA = {
   "Çanakkale": ["Ayvacık", "Bayramiç", "Biga", "Bozcaada", "Çan", "Eceabat", "Ezine", "Gelibolu", "Gökçeada", "Lapseki", "Merkez", "Yenice"],
   "Çankırı": ["Atkaracalar", "Bayramören", "Çerkeş", "Eldivan", "Ilgaz", "Kızılırmak", "Korgun", "Kurşunlu", "Merkez", "Orta", "Şabanözü", "Yapraklı"],
   "Çorum": ["Alaca", "Bayat", "Boğazkale", "Dodurga", "İskilip", "Kargı", "Laçin", "Mecitözü", "Merkez", "Oğuzlar", "Ortaköy", "Osmancık", "Sungurlu", "Uğurludağ"],
-  "Denizli": ["Acıpayam", "Babadağ", "Baklan", "Bekilli", "Beyağaç", "Bozkurt", "Buldan", "Çal", "Çameli", "Çardak", "Çivril", "Güney", "Honaz", "Kale", "Merkezefendi", "Pamukkale", "Sarayköy", "Serinhisar", "Tavas"],
+  "Denizli": ["Acıpayam", "Babadağ", "Baklan", "Bekilli", "Beyağaç", "Bozkurt", "Buldan", "Çal", "Çameli", "Çardak", "Çivril", "Denizli Merkez", "Güney", "Honaz", "Kale", "Merkezefendi", "Pamukkale", "Sarayköy", "Serinhisar", "Tavas"],
   "Diyarbakır": ["Bağlar", "Bismil", "Çermik", "Çınar", "Çüngüş", "Dicle", "Eğil", "Ergani", "Hani", "Hazro", "Kayapınar", "Kocaköy", "Kulp", "Lice", "Silvan", "Sur", "Yenişehir"],
   "Edirne": ["Enez", "Havsa", "İpsala", "Keşan", "Lalapaşa", "Meriç", "Merkez", "Süloğlu", "Uzunköprü"],
   "Elazığ": ["Ağın", "Alacakaya", "Arıcak", "Baskil", "Karakoçan", "Keban", "Kovancılar", "Maden", "Merkez", "Palu", "Sivrice"],
@@ -113,7 +113,6 @@ export default function DenetimTakipApp({ onBack }) {
   const [successMsg, setSuccessMsg] = useState(''); 
 
   // DENETİM NOT MODALI İÇİN STATE
-  // pendingAudit = { unitId, date, planId (varsa), step: 'ask' | 'note' }
   const [pendingAudit, setPendingAudit] = useState(null);
   const [pendingAuditNote, setPendingAuditNote] = useState('');
   
@@ -141,6 +140,78 @@ export default function DenetimTakipApp({ onBack }) {
       setErrorMsg("Oturum hatası: Lütfen tekrar giriş yapın.");
       return;
     }
+
+    const initializeDefaultUnits = async () => {
+      try {
+        const flagRef = doc(db, 'kullanici_ayarlari', uid);
+        const flagSnap = await getDoc(flagRef);
+
+        if (!flagSnap.exists() || !flagSnap.data().baslangicBirimleriEklendi) {
+          
+          const defaultUnits = [
+            { city: 'Aydın', district: 'Didim', name: 'Didim' },
+            { city: 'Aydın', district: 'Didim', name: 'Didim Akbük' },
+            { city: 'Aydın', district: 'Didim', name: 'Didim Çarşı' },
+            { city: 'Aydın', district: 'İncirliova', name: 'İncirliova' },
+            { city: 'Aydın', district: 'Kuşadası', name: 'Kuşadası' },
+            { city: 'Aydın', district: 'Kuşadası', name: 'Kuşadası Davutlar' },
+            { city: 'Aydın', district: 'Kuşadası', name: 'Kuşadası Flora' },
+            { city: 'Aydın', district: 'Efeler', name: 'Merkez' },
+            { city: 'Aydın', district: 'Efeler', name: 'Mimar Sinan' },
+            { city: 'Aydın', district: 'Nazilli', name: 'Nazilli' },
+            { city: 'Aydın', district: 'Söke', name: 'Söke' },
+            { city: 'Aydın', district: 'Söke', name: 'Söke Cumhuriyet' },
+            { city: 'Aydın', district: 'Aydın Merkez', name: 'Zeybek' },
+            { city: 'Denizli', district: 'Merkezefendi', name: 'Albayrak' },
+            { city: 'Denizli', district: 'Pamukkale', name: 'Bağbaşı' },
+            { city: 'Denizli', district: 'Denizli Merkez', name: 'Çamlık' },
+            { city: 'Denizli', district: 'Merkezefendi', name: 'Çaybaşı' },
+            { city: 'Denizli', district: 'Merkezefendi', name: 'Servergazi' },
+            { city: 'Denizli', district: 'Merkezefendi', name: 'Yenişafak' },
+            { city: 'İzmir', district: 'Çeşme', name: 'Alaçatı' },
+            { city: 'İzmir', district: 'Torbalı', name: 'Ayrancılar' },
+            { city: 'İzmir', district: 'Balçova', name: 'Balçova' },
+            { city: 'İzmir', district: 'Çeşme', name: 'Çeşme' },
+            { city: 'İzmir', district: 'Buca', name: 'Fırat Mahallesi' },
+            { city: 'İzmir', district: 'Konak', name: 'Göztepe' },
+            { city: 'İzmir', district: 'Güzelbahçe', name: 'Güzelbahçe' },
+            { city: 'İzmir', district: 'Konak', name: 'Hatay' },
+            { city: 'İzmir', district: 'Karabağlar', name: 'Karabağlar' },
+            { city: 'İzmir', district: 'Kemalpaşa', name: 'Kemalpaşa' },
+            { city: 'İzmir', district: 'Menderes', name: 'Menderes' },
+            { city: 'İzmir', district: 'Narlıdere', name: 'Narlıdere' },
+            { city: 'İzmir', district: 'Ödemiş', name: 'Ödemiş' },
+            { city: 'İzmir', district: 'Menderes', name: 'Özdere' },
+            { city: 'İzmir', district: 'Seferihisar', name: 'Seferihisar' },
+            { city: 'İzmir', district: 'Selçuk', name: 'Selçuk' },
+            { city: 'İzmir', district: 'Torbalı', name: 'Torbalı' },
+            { city: 'İzmir', district: 'Torbalı', name: 'Torbalı Alpkent' },
+            { city: 'İzmir', district: 'Konak', name: 'Üçyol' },
+            { city: 'İzmir', district: 'Kemalpaşa', name: 'Ulucak' },
+            { city: 'İzmir', district: 'Seferihisar', name: 'Ürkmez' },
+            { city: 'İzmir', district: 'Urla', name: 'Urla' },
+            { city: 'İzmir', district: 'Karabağlar', name: 'Yeşilyurt' },
+            { city: 'Manisa', district: 'Saruhanlı', name: 'Saruhanlı' },
+            { city: 'Muğla', district: 'Bodrum', name: 'Gümbet' },
+            { city: 'Muğla', district: 'Bodrum', name: 'Ortakent' },
+            { city: 'Muğla', district: 'Milas', name: 'Milas' },
+            { city: 'Muğla', district: 'Menteşe', name: 'Mumcular' },
+            { city: 'Muğla', district: 'Milas', name: 'Ören' },
+            { city: 'Muğla', district: 'Bodrum', name: 'Turgutreis' },
+            { city: 'Muğla', district: 'Bodrum', name: 'Yalıkavak' },
+            { city: 'Muğla', district: 'Yatağan', name: 'Yatağan' }
+          ];
+
+          for (const u of defaultUnits) {
+            await addDoc(collection(db, 'bireysel_birimler'), { ...u, userId: uid, notes: '', notesList: [] });
+          }
+
+          await setDoc(flagRef, { baslangicBirimleriEklendi: true }, { merge: true });
+        }
+      } catch (err) {}
+    };
+
+    initializeDefaultUnits();
 
     try {
       const qUnits = query(collection(db, 'bireysel_birimler'), where("userId", "==", uid));
@@ -227,29 +298,24 @@ export default function DenetimTakipApp({ onBack }) {
     await updateDoc(doc(db, 'bireysel_birimler', unitId), { notesList: updatedNotes });
   };
 
-  // Modaldan gelen onayla asıl kayıt işlemini yapan fonksiyon
   const executeAuditSave = async (withNote) => {
     if (!pendingAudit) return;
     const { unitId, date, planId } = pendingAudit;
     const uid = auth.currentUser?.uid;
     
     try {
-        // İstenmişse ve not boş değilse şubeye notu ekle
         if (withNote && pendingAuditNote.trim()) {
             await appendNoteToUnit(unitId, pendingAuditNote);
         }
         
-        // Denetim kaydını ekle
         await addDoc(collection(db, 'bireysel_denetimler'), { unitId, date, userId: uid });
         
-        // Bu bir plan tamamlama işleminden geliyorsa planı sil
         if (planId) {
             await deleteDoc(doc(db, 'bireysel_planlar', planId));
         }
         
         showSuccess('Ziyaret başarıyla eklendi.');
         
-        // Eğer Seri Ekleden geliyorsa seçim kutusunu temizle
         if (!planId && date === newAudit.date && unitId === newAudit.unitId) {
             setNewAudit({...newAudit, unitId: ''});
         }
@@ -283,10 +349,12 @@ export default function DenetimTakipApp({ onBack }) {
         setErrorMsg('Bu şubeye seçilen tarihte zaten bir ziyaret kaydı var!');
         return;
       }
-      setPendingAudit({ unitId: newAudit.unitId, date: newAudit.date, step: 'ask' });
+      const existingPlan = plans.find(p => p.unitId === newAudit.unitId && p.date === newAudit.date);
+      setPendingAudit({ unitId: newAudit.unitId, date: newAudit.date, planId: existingPlan?.id, step: 'ask' });
     }
   };
 
+  // BUGÜN GİDİLDİ BUG'I ÇÖZÜMÜ
   const handleQuickAddAudit = (unitId, e) => {
     e.stopPropagation();
     const today = getLocalYYYYMMDD();
@@ -296,7 +364,9 @@ export default function DenetimTakipApp({ onBack }) {
         setErrorMsg('Bu şubeye bugün zaten gidildi!');
         return;
       }
-      setPendingAudit({ unitId: unitId, date: today, step: 'ask' });
+      // Planda varsa tespit et, pendingAudit'e planId'yi ver ki kaydedilince planı silsin.
+      const existingPlan = plans.find(p => p.unitId === unitId && p.date === today);
+      setPendingAudit({ unitId: unitId, date: today, planId: existingPlan?.id, step: 'ask' });
     }
   };
 
@@ -306,7 +376,6 @@ export default function DenetimTakipApp({ onBack }) {
     }
   };
 
-  // YÖNETİM SEKMESİ ŞUBE SİLME (BİRİM VE TÜM GEÇMİŞİ)
   const handleDeleteUnit = async (unitId) => {
     if(window.confirm('Bu şubeyi silmek istediğinize emin misiniz?')) {
       try {
@@ -327,27 +396,36 @@ export default function DenetimTakipApp({ onBack }) {
     }
   };
 
-  // YÖNETİM SEKMESİ HER ŞEYİ SIFIRLA (3 KERE ONAY)
   const handleFactoryReset = async () => {
     if (!window.confirm("DİKKAT: Tüm şubeleriniz, denetim geçmişiniz ve planlarınız silinecek. Emin misiniz?")) return;
-    if (!window.confirm("BU İŞLEM GERİ ALINAMAZ. Gerçekten her şeyi silmek istiyor musunuz?")) return;
-    if (!window.confirm("Son kararınız mı? Devam ederseniz sisteminiz tamamen sıfırlanacak!")) return;
+    if (!window.confirm("BU İŞLEM GERİ ALINAMAZ. Gerçekten her şeyi silip başlangıç ayarlarına (İlk 51 Şubeye) dönmek istiyor musunuz?")) return;
+    if (!window.confirm("Son kararınız mı? Devam ederseniz sistem ilk günkü haline dönecek!")) return;
+
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
 
     try {
       const batch = writeBatch(db);
+      
       units.forEach(u => batch.delete(doc(db, 'bireysel_birimler', u.id)));
       audits.forEach(a => batch.delete(doc(db, 'bireysel_denetimler', a.id)));
       plans.forEach(p => batch.delete(doc(db, 'bireysel_planlar', p.id)));
       
+      batch.set(doc(db, 'kullanici_ayarlari', uid), { baslangicBirimleriEklendi: false }, { merge: true });
+      
       await batch.commit();
-      showSuccess('Tüm verileriniz başarıyla sıfırlandı.');
-      setActiveTab('dashboard');
+      
+      showSuccess('Veriler silindi. Varsayılan şubeler yükleniyor...');
+      
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+
     } catch (e) {
       setErrorMsg('Sıfırlama başarısız: ' + e.message);
     }
   };
 
-  // --- PLANLAMA İŞLEMLERİ ---
   const handleAddPlan = async (unitId, date) => {
     const uid = auth.currentUser?.uid;
     if (!unitId || !date || !uid) return false;
@@ -386,13 +464,11 @@ export default function DenetimTakipApp({ onBack }) {
     try { await deleteDoc(doc(db, 'bireysel_planlar', planId)); } catch (err) {}
   };
 
-  // --- ŞUBE DETAY İÇİNDEN NOT İŞLEMLERİ ---
   const handleSaveNote = async () => {
     if(!selectedUnitForDetail || !unitNote.trim()) return;
     setIsSavingNote(true);
     try {
       await appendNoteToUnit(selectedUnitForDetail.id, unitNote);
-      // Listeyi anlık güncel tutmak için
       const newNoteObj = { id: Date.now().toString(), date: new Date().toISOString(), text: unitNote.trim() };
       const currentNotes = selectedUnitForDetail.notesList || [];
       setSelectedUnitForDetail({...selectedUnitForDetail, notesList: [newNoteObj, ...currentNotes]});
@@ -476,6 +552,19 @@ export default function DenetimTakipApp({ onBack }) {
       return { ...p, unitName: u ? u.name : 'Bilinmeyen Şube', district: u ? u.district : '' };
     });
   }, [plans, units]);
+
+  // TÜM NOTLARI HAZIRLA (YENİ ÖZELLİK)
+  const allNotesData = useMemo(() => {
+    let all = [];
+    units.forEach(u => {
+      if (u.notesList && u.notesList.length > 0) {
+        u.notesList.forEach(n => {
+          all.push({ ...n, unitName: u.name, unitCity: u.city, unitId: u.id });
+        });
+      }
+    });
+    return all.sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [units]);
 
   const filterOptions = [
     { label: 'Tümü', value: 'all', color: 'bg-gray-400' },
@@ -610,8 +699,7 @@ export default function DenetimTakipApp({ onBack }) {
       <div className="bg-white px-4 pt-6 pb-4 shadow-sm flex items-center justify-between sticky top-0 z-40">
         <button 
           onClick={() => {
-            if (activeTab === 'unitDetail') setActiveTab('dashboard');
-            else if (activeTab === 'weeklyPlans') setActiveTab('dashboard');
+            if (['unitDetail', 'weeklyPlans', 'allNotes'].includes(activeTab)) setActiveTab('dashboard');
             else onBack();
           }} 
           className="p-2 -ml-2 text-gray-500 hover:text-gray-800 transition rounded-full active:bg-gray-100"
@@ -621,13 +709,19 @@ export default function DenetimTakipApp({ onBack }) {
         <h1 className="text-lg font-bold flex items-center gap-2 text-gray-800">
           {activeTab === 'unitDetail' ? <><MapPin className="text-blue-600" size={22} /> Şube Detayı</> : 
            activeTab === 'weeklyPlans' ? <><CalendarDays className="text-purple-600" size={22} /> Haftalık Shift</> : 
+           activeTab === 'allNotes' ? <><FileText className="text-yellow-500" size={22} /> Tüm Notlar</> : 
            <><CheckCircle2 className="text-blue-600" size={22} /> Denetim Takip</>}
         </h1>
         {activeTab === 'dashboard' ? (
-          <button onClick={() => setActiveTab('weeklyPlans')} className="text-purple-600 p-2 -mr-2 bg-purple-50 rounded-full active:bg-purple-100">
-            <CalendarDays size={20} />
-          </button>
-        ) : <div className="w-8"></div>}
+          <div className="flex gap-1 -mr-2">
+            <button onClick={() => setActiveTab('allNotes')} className="text-yellow-600 p-2 bg-yellow-50 rounded-full active:bg-yellow-100 transition" title="Tüm Notlar">
+              <FileText size={20} />
+            </button>
+            <button onClick={() => setActiveTab('weeklyPlans')} className="text-purple-600 p-2 bg-purple-50 rounded-full active:bg-purple-100 transition" title="Haftalık Planlar">
+              <CalendarDays size={20} />
+            </button>
+          </div>
+        ) : <div className="w-[88px]"></div>}
       </div>
 
       {/* UYARI VE BAŞARI MESAJLARI */}
@@ -791,11 +885,37 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
+        {/* TÜM NOTLAR EKRANI */}
+        {activeTab === 'allNotes' && (
+          <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+            {allNotesData.length === 0 ? (
+               <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">
+                 Sistemde henüz hiçbir not bulunmuyor.
+               </div>
+            ) : (
+               <div className="space-y-3">
+                 {allNotesData.map(note => (
+                   <div key={note.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-2">
+                     <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-sm font-bold text-gray-800">{note.unitName}</p>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{note.unitCity}</p>
+                        </div>
+                        <span className="text-[10px] font-bold text-yellow-700 bg-yellow-50 border border-yellow-100 px-2 py-1 rounded-lg shrink-0">
+                          {new Date(note.date).toLocaleDateString('tr-TR', {day:'numeric', month:'short', year:'numeric'})}
+                        </span>
+                     </div>
+                     <p className="text-sm text-gray-700 italic bg-gray-50 p-3 rounded-xl border border-gray-100">"{note.text}"</p>
+                   </div>
+                 ))}
+               </div>
+            )}
+          </div>
+        )}
+
         {/* HAFTALIK SHIFT / TÜM PLANLAR EKRANI */}
         {activeTab === 'weeklyPlans' && (
           <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
-            <h2 className="text-xl font-bold text-gray-800 mb-2">Gelecek Planlar</h2>
-            
             {plans.length === 0 ? (
               <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">
                 Henüz yapılmış bir planınız bulunmuyor.
@@ -1001,7 +1121,7 @@ export default function DenetimTakipApp({ onBack }) {
               </div>
 
               {/* Çark Çıktı Ekranı */}
-              <div className="bg-gray-900 rounded-2xl p-6 min-h-[140px] flex flex-col items-center justify-center relative overflow-hidden mb-6 shadow-inner border-[4px] border-gray-800">
+              <div className="bg-gray-900 rounded-2xl p-6 min-h-[140px] flex items-center justify-center relative overflow-hidden mb-6 shadow-inner border-[4px] border-gray-800">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/40 via-gray-900 to-gray-900 pointer-events-none"></div>
                 
                 {isSpinning ? (
@@ -1010,12 +1130,12 @@ export default function DenetimTakipApp({ onBack }) {
                     <p className="text-2xl font-black text-white truncate px-4">{flashingUnitName}</p>
                   </div>
                 ) : wheelResult ? (
-                  <div className="text-center z-10 animate-in zoom-in duration-300 w-full">
-                    <p className="text-green-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Hedef Bulundu</p>
-                    <h3 className="text-2xl md:text-3xl font-black text-white mb-1 leading-tight">{wheelResult.name}</h3>
-                    <p className="text-gray-400 text-xs mb-3">{wheelResult.city} / {wheelResult.district}</p>
+                  <div className="text-center z-10 animate-in zoom-in duration-300">
+                    <p className="text-green-400 text-xs font-bold uppercase tracking-[0.2em] mb-2">Hedef Bulundu</p>
+                    <h3 className="text-3xl font-black text-white mb-1">{wheelResult.name}</h3>
+                    <p className="text-gray-400 text-sm">{wheelResult.city} / {wheelResult.district}</p>
                     
-                    <div className="flex gap-2 justify-center mt-2">
+                    <div className="flex gap-2 justify-center mt-3">
                       <button 
                         onClick={async () => {
                            const success = await handleAddPlan(wheelResult.id, getLocalYYYYMMDD());
@@ -1024,9 +1144,9 @@ export default function DenetimTakipApp({ onBack }) {
                               setFlashingUnitName('');
                            }
                         }}
-                        className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1 transition shadow-lg shadow-purple-600/30"
+                        className="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-1.5 transition shadow-lg shadow-purple-600/30"
                       >
-                        <CalendarPlus size={14}/> Bugüne Planla
+                        <CalendarPlus size={16}/> Bugüne Planla
                       </button>
                     </div>
                   </div>
@@ -1130,7 +1250,6 @@ export default function DenetimTakipApp({ onBack }) {
               </h2>
               <div className="space-y-4">
                 
-                {/* İL SEÇİMİ */}
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">İl Seçiniz</label>
                   <select 
@@ -1143,7 +1262,6 @@ export default function DenetimTakipApp({ onBack }) {
                   </select>
                 </div>
 
-                {/* İLÇE SEÇİMİ */}
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">İlçe Seçiniz</label>
                   <select 
@@ -1157,7 +1275,6 @@ export default function DenetimTakipApp({ onBack }) {
                   </select>
                 </div>
 
-                {/* MANUEL BİRİM ADI */}
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Şube/Birim Adı</label>
                   <input 
@@ -1216,10 +1333,10 @@ export default function DenetimTakipApp({ onBack }) {
                 onClick={handleFactoryReset}
                 className="w-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 py-4 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2"
               >
-                <AlertTriangle size={18} /> Tüm Verilerimi Sıfırla
+                <AlertTriangle size={18} /> İlk Kuruluma Döndür (Sıfırla)
               </button>
-              <p className="text-[10px] text-center text-gray-400 mt-2 px-4">
-                Bu işlem şubelerinizi, tüm geçmiş denetimleri ve planları kalıcı olarak siler!
+              <p className="text-[10px] text-center text-gray-400 mt-2 px-4 leading-tight">
+                Bu işlem her şeyi siler ve belirlediğin 51 şubeyi ilk günkü gibi yeniden sisteme yükler.
               </p>
             </div>
 
@@ -1232,9 +1349,9 @@ export default function DenetimTakipApp({ onBack }) {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around items-center pb-safe z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.02)] h-16 px-1">
         <button 
           onClick={() => setActiveTab('dashboard')} 
-          className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'dashboard' || activeTab === 'unitDetail' || activeTab === 'weeklyPlans' ? 'text-blue-600' : 'text-gray-400'}`}
+          className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${['dashboard', 'unitDetail', 'weeklyPlans', 'allNotes'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}
         >
-          <List size={22} className={activeTab === 'dashboard' || activeTab === 'unitDetail' || activeTab === 'weeklyPlans' ? 'stroke-[2.5px]' : 'stroke-2'} />
+          <List size={22} className={['dashboard', 'unitDetail', 'weeklyPlans', 'allNotes'].includes(activeTab) ? 'stroke-[2.5px]' : 'stroke-2'} />
           <span className="text-[10px] font-bold">Liste</span>
         </button>
         <button 

@@ -127,6 +127,7 @@ export default function DenetimTakipApp({ onBack }) {
   const [selectedUnitForDetail, setSelectedUnitForDetail] = useState(null);
   const [unitNote, setUnitNote] = useState('');
   const [planDate, setPlanDate] = useState(getLocalYYYYMMDD()); 
+  const [detailAuditDate, setDetailAuditDate] = useState(getLocalYYYYMMDD()); // YENİ: Şube detayı içindeki tarih seçici
   const [isSavingNote, setIsSavingNote] = useState(false);
 
   // ÇARK / KURA DURUMLARI
@@ -287,12 +288,10 @@ export default function DenetimTakipApp({ onBack }) {
     return `${days} Gün`;
   };
 
-  // SADECE AKTİF EKLİ OLAN İLLERİ LİSTELEME
   const activeCities = useMemo(() => {
     return [...new Set(units.map(u => u.city))].sort((a,b) => a.localeCompare(b, 'tr'));
   }, [units]);
 
-  // TÜM 81 İL (Sadece Yeni Şube Ekleme ekranı için kullanılır)
   const uniqueCitiesList = useMemo(() => Object.keys(TURKEY_DATA).sort((a,b) => a.localeCompare(b, 'tr')), []);
 
   // --- ZİYARET EKLEME & NOT MODALI İŞLEMLERİ ---
@@ -439,14 +438,12 @@ export default function DenetimTakipApp({ onBack }) {
     const uid = auth.currentUser?.uid;
     if (!unitId || !date || !uid) return false;
     
-    // KURAL 1: Seçilen tarihte zaten gidilmiş mi kontrolü (YENİ EKLENDİ)
     const isAlreadyVisited = audits.some(a => a.unitId === unitId && a.date === date);
     if (isAlreadyVisited) {
         setErrorMsg('Bu şubeye seçilen tarihte zaten gidilmiş!');
         return false;
     }
 
-    // KURAL 2: Seçilen tarihte zaten bir plan var mı kontrolü
     const isAlreadyPlanned = plans.some(p => p.unitId === unitId && p.date === date);
     if (isAlreadyPlanned) {
         setErrorMsg('Bu şubeye bu tarih için zaten bir plan var!');
@@ -498,7 +495,6 @@ export default function DenetimTakipApp({ onBack }) {
     setIsSavingNote(false);
   };
 
-  // EVRENSEL NOT SİLME FONKSİYONU (Hem Şube Detaydan Hem Tüm Notlardan siler)
   const handleDeleteNote = async (noteId, targetUnitId) => {
     if(!window.confirm('Bu notu silmek istediğinize emin misiniz?')) return;
     try {
@@ -640,6 +636,7 @@ export default function DenetimTakipApp({ onBack }) {
     setSelectedUnitForDetail(unit);
     setUnitNote('');
     setPlanDate(getLocalYYYYMMDD());
+    setDetailAuditDate(getLocalYYYYMMDD()); // Detay içindeki ziyaret tarihi seçiciyi sıfırla
     setActiveTab('unitDetail');
     setErrorMsg('');
     setSuccessMsg('');
@@ -1087,6 +1084,35 @@ export default function DenetimTakipApp({ onBack }) {
                       className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition"
                     >
                       Planla
+                    </button>
+                  </div>
+                </div>
+
+                {/* ZİYARET EKLEME ALANI (Geçmiş veya Bugün İçin) */}
+                <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                  <label className="text-xs font-bold text-blue-800 flex items-center gap-1 mb-2">
+                    <CheckCircle2 size={14}/> Ziyaret Kaydı Ekle
+                  </label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="date" 
+                      className="flex-1 p-2 rounded-lg border border-blue-200 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-400"
+                      value={detailAuditDate}
+                      onChange={(e) => setDetailAuditDate(e.target.value)}
+                    />
+                    <button 
+                      onClick={() => {
+                        const isAlreadyVisited = audits.some(a => a.unitId === selectedUnitForDetail.id && a.date === detailAuditDate);
+                        if (isAlreadyVisited) {
+                          setErrorMsg('Bu şubeye seçilen tarihte zaten gidilmiş!');
+                          return;
+                        }
+                        const existingPlan = plans.find(p => p.unitId === selectedUnitForDetail.id && p.date === detailAuditDate);
+                        setPendingAudit({ unitId: selectedUnitForDetail.id, date: detailAuditDate, planId: existingPlan?.id, step: 'ask' });
+                      }}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition"
+                    >
+                      Ekle
                     </button>
                   </div>
                 </div>

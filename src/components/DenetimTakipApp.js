@@ -2,31 +2,39 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Plus, Trash2, Search, CheckCircle2, MapPin, 
   History, ArrowLeft, AlertCircle, List, Settings, Edit, 
-  Dna, Zap, FileText, X, ChevronRight, Shuffle
+  Dna, Zap, FileText, X, ChevronRight, Shuffle, CalendarPlus, CalendarDays, Check
 } from 'lucide-react';
 
 import { db, auth } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query, where, getDoc, setDoc } from 'firebase/firestore';
 
+// Yerel saat dilimine göre YYYY-MM-DD formatında tarihi almak için yardımcı fonksiyon
+const getLocalYYYYMMDD = (dateObj = new Date()) => {
+  const d = new Date(dateObj);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split('T')[0];
+};
+
 export default function DenetimTakipApp({ onBack }) {
   const [units, setUnits] = useState([]);
   const [audits, setAudits] = useState([]);
+  const [plans, setPlans] = useState([]); // YENİ: Planlar State'i
 
   const [newUnit, setNewUnit] = useState({ city: '', district: '', name: '' });
-  const [newAudit, setNewAudit] = useState({ unitId: '', date: new Date().toISOString().split('T')[0] });
+  const [newAudit, setNewAudit] = useState({ unitId: '', date: getLocalYYYYMMDD() });
   const [activeTab, setActiveTab] = useState('dashboard'); 
   const [searchTerm, setSearchTerm] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState(''); // Başarı mesajları için
   
-  // FİLTRELEME VE DÜZENLEME DURUMLARI
+  // FİLTRELEME DURUMLARI
   const [urgencyFilter, setUrgencyFilter] = useState('all'); 
   const [selectedCityFilter, setSelectedCityFilter] = useState('all'); 
-  const [editingUnitId, setEditingUnitId] = useState(null); 
-  const [editUnitData, setEditUnitData] = useState({ city: '', district: '', name: '' });
 
   // DETAY VE NOT DURUMLARI
   const [selectedUnitForDetail, setSelectedUnitForDetail] = useState(null);
   const [unitNote, setUnitNote] = useState('');
+  const [planDate, setPlanDate] = useState(getLocalYYYYMMDD()); // YENİ: Plan tarihi
   const [isSavingNote, setIsSavingNote] = useState(false);
 
   // ÇARK / KURA DURUMLARI
@@ -50,16 +58,14 @@ export default function DenetimTakipApp({ onBack }) {
         const flagSnap = await getDoc(flagRef);
 
         if (!flagSnap.exists() || !flagSnap.data().baslangicBirimleriEklendi) {
-          // Varsayılan birimler (kısalttım, kendi listeni ekleyebilirsin)
           const defaultUnits = [
             { city: 'Aydın', district: 'Efeler', name: 'Merkez' },
             { city: 'İzmir', district: 'Buca', name: 'Fırat Mahallesi' }
           ];
 
           for (const u of defaultUnits) {
-            await addDoc(collection(db, 'bireysel_birimler'), { ...u, userId: uid, notes: '' });
+            await addDoc(collection(db, 'bireysel_birimler'), { ...u, userId: uid, notes: '', notesList: [] });
           }
-
           await setDoc(flagRef, { baslangicBirimleriEklendi: true }, { merge: true });
         }
       } catch (err) {}
@@ -70,19 +76,24 @@ export default function DenetimTakipApp({ onBack }) {
     try {
       const qUnits = query(collection(db, 'bireysel_birimler'), where("userId", "==", uid));
       const unsubUnits = onSnapshot(qUnits, (snapshot) => {
-        const unitsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setUnits(unitsData);
+        setUnits(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       });
 
       const qAudits = query(collection(db, 'bireysel_denetimler'), where("userId", "==", uid));
       const unsubAudits = onSnapshot(qAudits, (snapshot) => {
-        const auditsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setAudits(auditsData);
+        setAudits(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+
+      // YENİ: Planları Çekme
+      const qPlans = query(collection(db, 'bireysel_planlar'), where("userId", "==", uid));
+      const unsubPlans = onSnapshot(qPlans, (snapshot) => {
+        setPlans(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       });
 
       return () => {
         unsubUnits();
         unsubAudits();
+        unsubPlans();
       };
     } catch (error) {
       setErrorMsg("Bağlantı hatası!");
@@ -96,8 +107,13 @@ export default function DenetimTakipApp({ onBack }) {
   const formatDateDisplay = (dateString) => {
     if (!dateString) return 'Kayıt Yok';
     const parts = dateString.split('-');
-    if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`;
     return dateString;
+  };
+
+  const showSuccess = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   const getDaysPassed = (lastDate) => {
@@ -133,39 +149,18 @@ export default function DenetimTakipApp({ onBack }) {
     return `${days} Gün`;
   };
 
+  // --- TEMEL İŞLEMLER ---
   const handleAddUnit = async () => {
     const uid = auth.currentUser?.uid;
     if (newUnit.city && newUnit.name && newUnit.district && uid) {
       try {
         await addDoc(collection(db, 'bireysel_birimler'), {
-          city: newUnit.city.trim(),
-          district: newUnit.district.trim(),
-          name: newUnit.name.trim(),
-          notes: '',
-          userId: uid
+          city: newUnit.city.trim(), district: newUnit.district.trim(), name: newUnit.name.trim(),
+          notes: '', notesList: [], userId: uid
         });
         setNewUnit({ city: '', district: '', name: '' });
+        showSuccess('Birim başarıyla eklendi.');
       } catch (error) { setErrorMsg(`Kaydedilemedi: ${error.message}`); }
-    }
-  };
-
-  const handleUpdateUnit = async () => {
-    if (editUnitData.city && editUnitData.district && editUnitData.name) {
-      try {
-        await updateDoc(doc(db, 'bireysel_birimler', editingUnitId), {
-          city: editUnitData.city.trim(),
-          district: editUnitData.district.trim(),
-          name: editUnitData.name.trim()
-        });
-        setEditingUnitId(null);
-      } catch (error) { setErrorMsg(`Güncellenemedi: ${error.message}`); }
-    }
-  };
-
-  const handleDeleteUnit = async (id) => {
-    if(window.confirm('Birimi silmek istediğinize emin misiniz?')) {
-      try { await deleteDoc(doc(db, 'bireysel_birimler', id)); } 
-      catch (error) {}
     }
   };
 
@@ -173,58 +168,98 @@ export default function DenetimTakipApp({ onBack }) {
     const uid = auth.currentUser?.uid;
     if (newAudit.unitId && newAudit.date && uid) {
       try {
-        await addDoc(collection(db, 'bireysel_denetimler'), { 
-          unitId: newAudit.unitId, date: newAudit.date, userId: uid
-        });
+        await addDoc(collection(db, 'bireysel_denetimler'), { unitId: newAudit.unitId, date: newAudit.date, userId: uid });
         setNewAudit({...newAudit, unitId: ''}); 
+        showSuccess('Denetim başarıyla eklendi.');
       } catch (error) { setErrorMsg(`Hata: ${error.message}`); }
     }
   };
 
-  // HIZLI DENETİM EKLE (BUGÜN)
   const handleQuickAddAudit = async (unitId, e) => {
     e.stopPropagation();
     const uid = auth.currentUser?.uid;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalYYYYMMDD();
     if (unitId && uid) {
       try {
-        await addDoc(collection(db, 'bireysel_denetimler'), { 
-          unitId: unitId, date: today, userId: uid
-        });
-      } catch (error) { setErrorMsg(`Hızlı ekleme hatası: ${error.message}`); }
+        await addDoc(collection(db, 'bireysel_denetimler'), { unitId: unitId, date: today, userId: uid });
+        showSuccess('Bugün gidildi olarak işaretlendi.');
+      } catch (error) { setErrorMsg(`Hata: ${error.message}`); }
     }
   };
 
   const handleDeleteAudit = async (id) => {
     if(window.confirm('Kaydı silmek istediğinize emin misiniz?')) {
-      try { await deleteDoc(doc(db, 'bireysel_denetimler', id)); } 
-      catch (error) {}
+      try { await deleteDoc(doc(db, 'bireysel_denetimler', id)); } catch (error) {}
     }
   };
 
+  // --- PLANLAMA İŞLEMLERİ ---
+  const handleAddPlan = async (unitId, date) => {
+    const uid = auth.currentUser?.uid;
+    if (!unitId || !date || !uid) return;
+    try {
+      await addDoc(collection(db, 'bireysel_planlar'), { unitId, date, userId: uid });
+      showSuccess(`${formatDateDisplay(date)} tarihine plan eklendi.`);
+    } catch (err) { setErrorMsg("Plan eklenirken hata oluştu."); }
+  };
+
+  const handleCompletePlan = async (plan, e) => {
+    e?.stopPropagation();
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    try {
+      await addDoc(collection(db, 'bireysel_denetimler'), { unitId: plan.unitId, date: plan.date, userId: uid });
+      await deleteDoc(doc(db, 'bireysel_planlar', plan.id));
+      showSuccess('Plan tamamlandı ve denetim eklendi.');
+    } catch (err) { setErrorMsg("İşlem sırasında hata oluştu."); }
+  };
+
+  const handleDeletePlan = async (planId, e) => {
+    e?.stopPropagation();
+    try { await deleteDoc(doc(db, 'bireysel_planlar', planId)); } catch (err) {}
+  };
+
+  // --- NOT İŞLEMLERİ (GÜNCELLENDİ) ---
   const handleSaveNote = async () => {
-    if(!selectedUnitForDetail) return;
+    if(!selectedUnitForDetail || !unitNote.trim()) return;
     setIsSavingNote(true);
     try {
+      const newNoteObj = {
+        id: Date.now().toString(),
+        date: new Date().toISOString(),
+        text: unitNote.trim()
+      };
+      
+      const currentNotes = selectedUnitForDetail.notesList || [];
+      const updatedNotes = [newNoteObj, ...currentNotes];
+
       await updateDoc(doc(db, 'bireysel_birimler', selectedUnitForDetail.id), {
-        notes: unitNote
+        notesList: updatedNotes
       });
-      // Update local state temporarily until snapshot catches up
-      setSelectedUnitForDetail({...selectedUnitForDetail, notes: unitNote});
+      
+      setSelectedUnitForDetail({...selectedUnitForDetail, notesList: updatedNotes});
+      setUnitNote('');
+      showSuccess('Not başarıyla eklendi.');
     } catch(err) {
       setErrorMsg("Not kaydedilemedi.");
     }
     setIsSavingNote(false);
   };
 
+  // --- VERİ HAZIRLIĞI ---
   const unitStats = useMemo(() => {
     return units
       .map(unit => {
         const unitAudits = audits.filter(a => a.unitId === unit.id);
-        const lastAudit = unitAudits.length > 0 
-          ? unitAudits.sort((a, b) => new Date(b.date) - new Date(a.date))[0].date 
-          : null;
-        return { ...unit, lastAudit, totalVisits: unitAudits.length, days: getDaysPassed(lastAudit) };
+        const unitPlans = plans.filter(p => p.unitId === unit.id && p.date >= getLocalYYYYMMDD()).sort((a,b) => new Date(a.date) - new Date(b.date));
+        const lastAudit = unitAudits.length > 0 ? unitAudits.sort((a, b) => new Date(b.date) - new Date(a.date))[0].date : null;
+        return { 
+          ...unit, 
+          lastAudit, 
+          totalVisits: unitAudits.length, 
+          days: getDaysPassed(lastAudit),
+          nextPlan: unitPlans.length > 0 ? unitPlans[0] : null
+        };
       })
       .filter(u => 
         u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -244,7 +279,7 @@ export default function DenetimTakipApp({ onBack }) {
         if (cityCompare !== 0) return cityCompare;
         return a.name.localeCompare(b.name, 'tr');
       });
-  }, [units, audits, searchTerm, urgencyFilter, selectedCityFilter]);
+  }, [units, audits, plans, searchTerm, urgencyFilter, selectedCityFilter]);
 
   const auditHistory = useMemo(() => {
     return audits
@@ -254,6 +289,14 @@ export default function DenetimTakipApp({ onBack }) {
       })
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [audits, units]);
+
+  const todaysPlans = useMemo(() => {
+    const todayStr = getLocalYYYYMMDD();
+    return plans.filter(p => p.date === todayStr).map(p => {
+      const u = units.find(u => u.id === p.unitId);
+      return { ...p, unitName: u ? u.name : 'Bilinmeyen Şube', district: u ? u.district : '' };
+    });
+  }, [plans, units]);
 
   const filterOptions = [
     { label: 'Tümü', value: 'all', color: 'bg-gray-400' },
@@ -265,7 +308,6 @@ export default function DenetimTakipApp({ onBack }) {
 
   // ÇARK SİSTEMİ MANTIĞI
   const handleSpinWheel = () => {
-    // Filtreleri uygula
     const eligibleUnits = units.map(unit => {
       const unitAudits = audits.filter(a => a.unitId === unit.id);
       const lastAudit = unitAudits.length > 0 ? unitAudits.sort((a, b) => new Date(b.date) - new Date(a.date))[0].date : null;
@@ -289,13 +331,12 @@ export default function DenetimTakipApp({ onBack }) {
     setWheelResult(null);
     let spins = 0;
     
-    // Slot makinesi gibi hızlıca isim değiştirme efekti
     const interval = setInterval(() => {
       const randomInd = Math.floor(Math.random() * eligibleUnits.length);
       setFlashingUnitName(eligibleUnits[randomInd].name);
       spins++;
       
-      if (spins > 25) { // Ortalama 2.5 saniye dönecek
+      if (spins > 25) { 
         clearInterval(interval);
         const winner = eligibleUnits[Math.floor(Math.random() * eligibleUnits.length)];
         setWheelResult(winner);
@@ -307,7 +348,8 @@ export default function DenetimTakipApp({ onBack }) {
 
   const openUnitDetail = (unit) => {
     setSelectedUnitForDetail(unit);
-    setUnitNote(unit.notes || '');
+    setUnitNote('');
+    setPlanDate(getLocalYYYYMMDD());
     setActiveTab('unitDetail');
   };
 
@@ -319,6 +361,7 @@ export default function DenetimTakipApp({ onBack }) {
         <button 
           onClick={() => {
             if (activeTab === 'unitDetail') setActiveTab('dashboard');
+            else if (activeTab === 'weeklyPlans') setActiveTab('dashboard');
             else onBack();
           }} 
           className="p-2 -ml-2 text-gray-500 hover:text-gray-800 transition rounded-full active:bg-gray-100"
@@ -326,31 +369,71 @@ export default function DenetimTakipApp({ onBack }) {
           <ArrowLeft size={24} />
         </button>
         <h1 className="text-lg font-bold flex items-center gap-2 text-gray-800">
-          <CheckCircle2 className="text-blue-600" size={22} />
-          {activeTab === 'unitDetail' ? 'Şube Detayı' : 'Denetim Takip'}
+          {activeTab === 'unitDetail' ? <><MapPin className="text-blue-600" size={22} /> Şube Detayı</> : 
+           activeTab === 'weeklyPlans' ? <><CalendarDays className="text-purple-600" size={22} /> Haftalık Shift</> : 
+           <><CheckCircle2 className="text-blue-600" size={22} /> Denetim Takip</>}
         </h1>
-        <div className="w-8"></div> 
+        {activeTab === 'dashboard' ? (
+          <button onClick={() => setActiveTab('weeklyPlans')} className="text-purple-600 p-2 -mr-2 bg-purple-50 rounded-full active:bg-purple-100">
+            <CalendarDays size={20} />
+          </button>
+        ) : <div className="w-8"></div>}
       </div>
 
+      {/* UYARI VE BAŞARI MESAJLARI */}
       {errorMsg && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 m-4 rounded-r-xl flex items-center gap-3">
           <AlertCircle className="text-red-500 shrink-0" size={20} />
           <p className="text-sm font-medium text-red-700">{errorMsg}</p>
         </div>
       )}
+      {successMsg && (
+        <div className="bg-green-50 border-l-4 border-green-500 p-4 m-4 rounded-r-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+          <CheckCircle2 className="text-green-500 shrink-0" size={20} />
+          <p className="text-sm font-medium text-green-700">{successMsg}</p>
+        </div>
+      )}
 
       <div className="p-4 space-y-6">
         
-        {/* ANA LİSTE EKRANI */}
+        {/* ANA LİSTE EKRANI (DASHBOARD) */}
         {activeTab === 'dashboard' && (
           <div className="space-y-4 animate-in fade-in duration-300">
             
+            {/* BUGÜNÜN PLANLARI (YENİ) */}
+            {todaysPlans.length > 0 && (
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-4 shadow-lg text-white">
+                <h3 className="font-bold text-sm flex items-center gap-2 mb-3 opacity-90">
+                  <Calendar size={16} /> Bugünün Planlanan Şubeleri
+                </h3>
+                <div className="space-y-2">
+                  {todaysPlans.map(plan => (
+                    <div key={plan.id} className="bg-white/10 p-3 rounded-xl flex items-center justify-between border border-white/20">
+                      <div>
+                        <p className="font-bold text-sm leading-tight">{plan.unitName}</p>
+                        <p className="text-[10px] opacity-75">{plan.district}</p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button onClick={(e) => handleDeletePlan(plan.id, e)} className="p-2 bg-red-500/20 text-red-100 rounded-lg hover:bg-red-500/40">
+                          <X size={16} />
+                        </button>
+                        <button onClick={(e) => handleCompletePlan(plan, e)} className="px-3 py-1.5 bg-white text-blue-600 text-xs font-bold rounded-lg flex items-center gap-1 active:scale-95">
+                          <Check size={14} /> Gidildi
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ARAMA VE FİLTRE */}
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input 
                   type="text" 
-                  placeholder="İlçe veya birim ara..." 
+                  placeholder="Ara..." 
                   className="w-full pl-10 pr-3 py-3.5 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition font-medium text-sm"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -361,10 +444,8 @@ export default function DenetimTakipApp({ onBack }) {
                 value={selectedCityFilter}
                 onChange={(e) => setSelectedCityFilter(e.target.value)}
               >
-                <option value="all">Tüm İller</option>
-                {availableCities.map(city => (
-                  <option key={city} value={city}>{city}</option>
-                ))}
+                <option value="all">İl</option>
+                {availableCities.map(city => <option key={city} value={city}>{city}</option>)}
               </select>
             </div>
 
@@ -373,7 +454,7 @@ export default function DenetimTakipApp({ onBack }) {
                 <button 
                   key={f.value}
                   onClick={() => setUrgencyFilter(f.value)}
-                  className={`flex-none px-3 py-1.5 rounded-lg shadow-sm border flex items-center gap-1.5 text-xs font-bold transition-all ${urgencyFilter === f.value ? 'bg-blue-50 border-blue-200 text-blue-700 scale-[1.02]' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50'}`}
+                  className={`flex-none px-3 py-1.5 rounded-lg shadow-sm border flex items-center gap-1.5 text-xs font-bold transition-all ${urgencyFilter === f.value ? 'bg-blue-50 border-blue-200 text-blue-700 scale-[1.02]' : 'bg-white border-gray-100 text-gray-600'}`}
                 >
                   {f.value !== 'all' && <div className={`w-2.5 h-2.5 rounded-full ${f.color}`}></div>}
                   {f.label}
@@ -381,52 +462,68 @@ export default function DenetimTakipApp({ onBack }) {
               ))}
             </div>
 
+            {/* BİRİM KARTLARI (TAŞMA DÜZELTİLDİ) */}
             <div className="grid gap-3">
-              {unitStats.map(unit => (
+              {unitStats.map(unit => {
+                const latestNote = unit.notesList && unit.notesList.length > 0 ? unit.notesList[0].text : unit.notes;
+                
+                return (
                 <div 
                   key={unit.id} 
                   onClick={() => openUnitDetail(unit)}
-                  className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-3 active:scale-[0.98] transition-transform cursor-pointer relative overflow-hidden"
+                  className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-2 active:scale-[0.98] transition-transform cursor-pointer relative overflow-hidden"
                 >
                   <div className={`absolute top-0 left-0 w-1 h-full ${getStatusIndicatorColor(unit.days)}`}></div>
                   
-                  <div className="flex justify-between items-start pl-2">
-                    <div className="truncate pr-2">
-                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide truncate">
+                  <div className="flex justify-between items-start pl-2 gap-2">
+                    {/* SOL TARAF: Uzun metinler kesilecek (truncate) */}
+                    <div className="min-w-0 flex-1"> 
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide truncate">
                         {unit.city} {unit.district ? `• ${unit.district}` : ''}
                       </p>
-                      <h3 className="font-bold text-gray-800 text-base truncate leading-tight mt-0.5">{unit.name}</h3>
-                      <div className="flex items-center gap-3 mt-1.5">
-                        <p className="text-[12px] text-gray-500 flex items-center gap-1 font-medium">
+                      <h3 className="font-bold text-gray-800 text-[15px] leading-tight mt-0.5 truncate">{unit.name}</h3>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                        <p className="text-[11px] text-gray-500 flex items-center gap-1 font-medium whitespace-nowrap">
                           <Calendar size={12} className="text-gray-400" /> {formatDateDisplay(unit.lastAudit)}
                         </p>
-                        <p className="text-[12px] text-gray-500 flex items-center gap-1 font-medium bg-gray-50 px-1.5 py-0.5 rounded-md">
+                        <p className="text-[11px] text-gray-500 flex items-center gap-1 font-medium bg-gray-50 px-1.5 py-0.5 rounded-md whitespace-nowrap">
                           <History size={12} className="text-gray-400" /> Toplam: {unit.totalVisits}
                         </p>
                       </div>
                     </div>
                     
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      <div className={`px-2 py-1 rounded-md text-[11px] font-bold border ${getStatusColor(unit.days)} text-center`}>
+                    {/* SAĞ TARAF: Butonlar alanı (Sabit genişlikte ve alt alta) */}
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusColor(unit.days)} text-center`}>
                         {getStatusLabel(unit.days)}
                       </div>
                       <button 
                         onClick={(e) => handleQuickAddAudit(unit.id, e)}
-                        className="flex items-center gap-1 text-[11px] font-bold bg-blue-50 text-blue-600 px-2 py-1.5 rounded-lg hover:bg-blue-100 active:bg-blue-200 transition-colors"
+                        className="flex items-center gap-1 text-[10px] font-bold bg-blue-50 text-blue-600 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors whitespace-nowrap"
                       >
                         <Zap size={12} className="fill-blue-600" /> Bugün Gidildi
                       </button>
                     </div>
                   </div>
+
+                  {/* PLAN BİLGİSİ */}
+                  {unit.nextPlan && (
+                    <div className="pl-2 mt-1">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100">
+                        <CalendarPlus size={12} /> Planlı: {formatDateDisplay(unit.nextPlan.date)}
+                      </span>
+                    </div>
+                  )}
                   
-                  {unit.notes && (
-                    <div className="pl-2 mt-1 flex items-start gap-1.5 text-xs text-gray-500 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                  {/* NOT GÖSTERİMİ */}
+                  {latestNote && (
+                    <div className="pl-2 mt-1 flex items-start gap-1.5 text-[11px] text-gray-500 bg-gray-50 p-2 rounded-lg border border-gray-100">
                       <FileText size={12} className="mt-0.5 shrink-0 text-gray-400" />
-                      <p className="line-clamp-1 italic">{unit.notes}</p>
+                      <p className="line-clamp-2 italic">{latestNote}</p>
                     </div>
                   )}
                 </div>
-              ))}
+              )})}
               {unitStats.length === 0 && (
                 <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">
                   Kritere uygun birim bulunamadı.
@@ -436,9 +533,56 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
+        {/* HAFTALIK SHIFT / TÜM PLANLAR EKRANI */}
+        {activeTab === 'weeklyPlans' && (
+          <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Gelecek Planlar</h2>
+            
+            {plans.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">
+                Henüz yapılmış bir planınız bulunmuyor.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Planları tarihe göre grupla */}
+                {Object.entries(
+                  plans.reduce((acc, plan) => {
+                    (acc[plan.date] = acc[plan.date] || []).push(plan);
+                    return acc;
+                  }, {})
+                ).sort(([dateA], [dateB]) => new Date(dateA) - new Date(dateB))
+                 .map(([date, dayPlans]) => (
+                  <div key={date} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 font-bold text-gray-700 flex items-center gap-2">
+                      <CalendarDays size={16} className="text-purple-600"/> {formatDateDisplay(date)}
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                      {dayPlans.map(plan => {
+                        const u = units.find(x => x.id === plan.unitId);
+                        return (
+                          <div key={plan.id} className="p-4 flex justify-between items-center">
+                            <div>
+                              <p className="font-bold text-sm text-gray-800">{u?.name || 'Bilinmeyen'}</p>
+                              <p className="text-xs text-gray-500">{u?.district} / {u?.city}</p>
+                            </div>
+                            <button onClick={() => handleDeletePlan(plan.id)} className="text-red-400 p-2 bg-red-50 rounded-lg">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ŞUBE DETAY EKRANI */}
         {activeTab === 'unitDetail' && selectedUnitForDetail && (() => {
           const uAudits = audits.filter(a => a.unitId === selectedUnitForDetail.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+          const unitNotes = selectedUnitForDetail.notesList || []; 
           
           return (
             <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
@@ -452,42 +596,88 @@ export default function DenetimTakipApp({ onBack }) {
                       <MapPin size={14}/> {selectedUnitForDetail.city} / {selectedUnitForDetail.district}
                     </p>
                   </div>
-                  <div className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${getStatusColor(selectedUnitForDetail.days)}`}>
+                  <div className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border ${getStatusColor(selectedUnitForDetail.days)}`}>
                     {getStatusLabel(selectedUnitForDetail.days)}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="grid grid-cols-2 gap-3 mb-5">
                   <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center">
-                    <p className="text-xs text-gray-500 font-bold uppercase mb-1">Toplam Ziyaret</p>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase mb-1">Toplam Ziyaret</p>
                     <p className="text-xl font-black text-blue-600">{uAudits.length}</p>
                   </div>
                   <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center">
-                    <p className="text-xs text-gray-500 font-bold uppercase mb-1">Son Ziyaret</p>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase mb-1">Son Ziyaret</p>
                     <p className="text-sm font-bold text-gray-700 mt-1.5">{formatDateDisplay(selectedUnitForDetail.lastAudit)}</p>
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                {/* PLANLAMA ALANI YENİ */}
+                <div className="mb-6 p-4 bg-purple-50 rounded-xl border border-purple-100">
+                  <label className="text-xs font-bold text-purple-800 flex items-center gap-1 mb-2">
+                    <CalendarPlus size={14}/> Bu Şubeye Plan Yap
+                  </label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="date" 
+                      className="flex-1 p-2 rounded-lg border border-purple-200 text-sm font-medium outline-none focus:ring-2 focus:ring-purple-400"
+                      value={planDate}
+                      onChange={(e) => setPlanDate(e.target.value)}
+                    />
+                    <button 
+                      onClick={() => handleAddPlan(selectedUnitForDetail.id, planDate)}
+                      className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition"
+                    >
+                      Planla
+                    </button>
+                  </div>
+                </div>
+
+                {/* NOT EKLEME ALANI */}
+                <div className="space-y-2 mb-4 border-t border-gray-100 pt-4">
                   <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                    <FileText size={14}/> Şube Notları
+                    <Plus size={14}/> Yeni Not Ekle
                   </label>
                   <textarea 
                     value={unitNote}
                     onChange={(e) => setUnitNote(e.target.value)}
-                    placeholder="Bu şube için notlarınızı buraya yazabilirsiniz..."
-                    className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]"
+                    placeholder="Ziyaretinizle ilgili not yazın..."
+                    className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
                   />
                   <button 
                     onClick={handleSaveNote}
-                    disabled={isSavingNote}
-                    className="w-full py-2.5 bg-gray-800 text-white rounded-xl text-sm font-bold shadow-sm active:bg-gray-900 transition-colors"
+                    disabled={isSavingNote || !unitNote.trim()}
+                    className="w-full py-2.5 bg-gray-800 text-white rounded-xl text-sm font-bold shadow-sm active:bg-gray-900 transition-colors disabled:opacity-50"
                   >
-                    {isSavingNote ? 'Kaydediliyor...' : 'Notu Kaydet'}
+                    {isSavingNote ? 'Kaydediliyor...' : 'Notu Ekle'}
                   </button>
                 </div>
+
+                {/* GEÇMİŞ NOTLAR */}
+                {unitNotes.length > 0 && (
+                  <div className="space-y-2 mt-4">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Geçmiş Notlar</label>
+                    <div className="max-h-[200px] overflow-y-auto pr-1 space-y-2">
+                      {unitNotes.map(n => (
+                        <div key={n.id} className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
+                          <p className="text-[10px] font-bold text-yellow-600 mb-1">{new Date(n.date).toLocaleDateString('tr-TR', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'})}</p>
+                          <p className="text-sm text-gray-700 italic">{n.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* ESKİ TEK TİP NOT VARSA GÖSTER (Geriye dönük uyumluluk) */}
+                {selectedUnitForDetail.notes && unitNotes.length === 0 && (
+                  <div className="mt-2 bg-yellow-50 p-3 rounded-lg border border-yellow-100">
+                    <p className="text-[10px] font-bold text-yellow-600 mb-1">Eski Not</p>
+                    <p className="text-sm text-gray-700 italic">{selectedUnitForDetail.notes}</p>
+                  </div>
+                )}
               </div>
 
+              {/* ZİYARET GEÇMİŞİ */}
               <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                 <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
                   <History size={16} className="text-blue-500" /> Ziyaret Geçmişi
@@ -545,7 +735,7 @@ export default function DenetimTakipApp({ onBack }) {
               </div>
 
               {/* Çark Çıktı Ekranı */}
-              <div className="bg-gray-900 rounded-2xl p-6 min-h-[140px] flex items-center justify-center relative overflow-hidden mb-6 shadow-inner border-[4px] border-gray-800">
+              <div className="bg-gray-900 rounded-2xl p-6 min-h-[140px] flex flex-col items-center justify-center relative overflow-hidden mb-6 shadow-inner border-[4px] border-gray-800">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/40 via-gray-900 to-gray-900 pointer-events-none"></div>
                 
                 {isSpinning ? (
@@ -554,13 +744,20 @@ export default function DenetimTakipApp({ onBack }) {
                     <p className="text-2xl font-black text-white truncate px-4">{flashingUnitName}</p>
                   </div>
                 ) : wheelResult ? (
-                  <div className="text-center z-10 animate-in zoom-in duration-300">
-                    <p className="text-green-400 text-xs font-bold uppercase tracking-[0.2em] mb-2">Hedef Bulundu</p>
-                    <h3 className="text-3xl font-black text-white mb-1">{wheelResult.name}</h3>
-                    <p className="text-gray-400 text-sm">{wheelResult.city} / {wheelResult.district}</p>
-                    <p className={`mt-3 inline-block px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(wheelResult.days)} border-none shadow-lg`}>
-                      {getStatusLabel(wheelResult.days)}
-                    </p>
+                  <div className="text-center z-10 animate-in zoom-in duration-300 w-full">
+                    <p className="text-green-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Hedef Bulundu</p>
+                    <h3 className="text-2xl md:text-3xl font-black text-white mb-1 leading-tight">{wheelResult.name}</h3>
+                    <p className="text-gray-400 text-xs mb-3">{wheelResult.city} / {wheelResult.district}</p>
+                    
+                    {/* YENİ: Çark üzerinden bugüne planlama */}
+                    <div className="flex gap-2 justify-center mt-2">
+                      <button 
+                        onClick={() => handleAddPlan(wheelResult.id, getLocalYYYYMMDD())}
+                        className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1 transition"
+                      >
+                        <CalendarPlus size={14}/> Bugüne Planla
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="text-gray-500 font-medium z-10 text-sm">
@@ -581,9 +778,8 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
-        {/* DENETİM EKLE EKRANI (Aynı kaldı) */}
+        {/* DENETİM EKLE EKRANI */}
         {activeTab === 'addAudit' && (
-           // ... (Orijinal kodunuzdaki AddAudit kısmı, yeri daraltmamak için buraya kopyalayabilirsiniz, mantığı değiştirmedik)
            <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-300">
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
               <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -652,11 +848,9 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
-        {/* BİRİM YÖNETİMİ EKRANI (Aynı kaldı) */}
+        {/* BİRİM YÖNETİMİ EKRANI */}
         {activeTab === 'units' && (
-           // ... (Orijinal Unit Yönetimi Kodları)
            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-             {/* ... Orijinal kod parçası ... */}
              <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
               <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                 <MapPin className="text-green-600" /> Yeni Birim Ekle
@@ -696,13 +890,13 @@ export default function DenetimTakipApp({ onBack }) {
 
       </div>
 
-      {/* MOBİL ALT NAVİGASYON BARI (Çark/Radar eklendi) */}
+      {/* MOBİL ALT NAVİGASYON BARI */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around items-center pb-safe z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.02)] h-16 px-1">
         <button 
           onClick={() => setActiveTab('dashboard')} 
-          className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'dashboard' || activeTab === 'unitDetail' ? 'text-blue-600' : 'text-gray-400'}`}
+          className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'dashboard' || activeTab === 'unitDetail' || activeTab === 'weeklyPlans' ? 'text-blue-600' : 'text-gray-400'}`}
         >
-          <List size={22} className={activeTab === 'dashboard' || activeTab === 'unitDetail' ? 'stroke-[2.5px]' : 'stroke-2'} />
+          <List size={22} className={activeTab === 'dashboard' || activeTab === 'unitDetail' || activeTab === 'weeklyPlans' ? 'stroke-[2.5px]' : 'stroke-2'} />
           <span className="text-[10px] font-bold">Liste</span>
         </button>
         <button 

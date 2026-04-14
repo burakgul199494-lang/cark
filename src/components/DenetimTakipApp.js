@@ -287,6 +287,14 @@ export default function DenetimTakipApp({ onBack }) {
     return `${days} Gün`;
   };
 
+  // SADECE AKTİF EKLİ OLAN İLLERİ LİSTELEME
+  const activeCities = useMemo(() => {
+    return [...new Set(units.map(u => u.city))].sort((a,b) => a.localeCompare(b, 'tr'));
+  }, [units]);
+
+  // TÜM 81 İL (Sadece Yeni Şube Ekleme ekranı için kullanılır)
+  const uniqueCitiesList = useMemo(() => Object.keys(TURKEY_DATA).sort((a,b) => a.localeCompare(b, 'tr')), []);
+
   // --- ZİYARET EKLEME & NOT MODALI İŞLEMLERİ ---
   const appendNoteToUnit = async (unitId, noteText) => {
     const unit = units.find(u => u.id === unitId);
@@ -482,17 +490,23 @@ export default function DenetimTakipApp({ onBack }) {
     setIsSavingNote(false);
   };
 
-  const handleDeleteNote = async (noteId) => {
+  // EVRENSEL NOT SİLME FONKSİYONU (Hem Şube Detaydan Hem Tüm Notlardan siler)
+  const handleDeleteNote = async (noteId, targetUnitId) => {
     if(!window.confirm('Bu notu silmek istediğinize emin misiniz?')) return;
     try {
-      const currentNotes = selectedUnitForDetail.notesList || [];
+      const targetUnit = units.find(u => u.id === targetUnitId);
+      if (!targetUnit) return;
+
+      const currentNotes = targetUnit.notesList || [];
       const updatedNotes = currentNotes.filter(n => n.id !== noteId);
 
-      await updateDoc(doc(db, 'bireysel_birimler', selectedUnitForDetail.id), {
+      await updateDoc(doc(db, 'bireysel_birimler', targetUnitId), {
         notesList: updatedNotes
       });
 
-      setSelectedUnitForDetail({...selectedUnitForDetail, notesList: updatedNotes});
+      if (selectedUnitForDetail && selectedUnitForDetail.id === targetUnitId) {
+        setSelectedUnitForDetail({...selectedUnitForDetail, notesList: updatedNotes});
+      }
       showSuccess('Not başarıyla silindi.');
     } catch(err) {
       setErrorMsg("Not silinirken hata oluştu.");
@@ -573,8 +587,6 @@ export default function DenetimTakipApp({ onBack }) {
     { label: '31-44 G', value: '31-44', color: 'bg-orange-500' },
     { label: '45+ G', value: '45+', color: 'bg-red-600' }
   ];
-
-  const uniqueCitiesList = useMemo(() => Object.keys(TURKEY_DATA).sort((a,b) => a.localeCompare(b, 'tr')), []);
 
   // ÇARK SİSTEMİ MANTIĞI
   const handleSpinWheel = () => {
@@ -830,7 +842,7 @@ export default function DenetimTakipApp({ onBack }) {
                 onChange={(e) => setSelectedCityFilter(e.target.value)}
               >
                 <option value="all">İl</option>
-                {uniqueCitiesList.map(city => <option key={city} value={city}>{city}</option>)}
+                {activeCities.map(city => <option key={city} value={city}>{city}</option>)}
               </select>
             </div>
 
@@ -951,9 +963,18 @@ export default function DenetimTakipApp({ onBack }) {
                           <p className="text-sm font-bold text-gray-800">{note.unitName}</p>
                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{note.unitCity}</p>
                         </div>
-                        <span className="text-[10px] font-bold text-yellow-700 bg-yellow-50 border border-yellow-100 px-2 py-1 rounded-lg shrink-0">
-                          {new Date(note.date).toLocaleDateString('tr-TR', {day:'numeric', month:'short', year:'numeric'})}
-                        </span>
+                        <div className="flex items-center gap-2">
+                           <span className="text-[10px] font-bold text-yellow-700 bg-yellow-50 border border-yellow-100 px-2 py-1 rounded-lg shrink-0">
+                             {new Date(note.date).toLocaleDateString('tr-TR', {day:'numeric', month:'short', year:'numeric'})}
+                           </span>
+                           <button 
+                             onClick={() => handleDeleteNote(note.id, note.unitId)}
+                             className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition shrink-0"
+                             title="Notu Sil"
+                           >
+                             <Trash2 size={16} />
+                           </button>
+                        </div>
                      </div>
                      <p className="text-sm text-gray-700 italic bg-gray-50 p-3 rounded-xl border border-gray-100">"{note.text}"</p>
                    </div>
@@ -1094,7 +1115,7 @@ export default function DenetimTakipApp({ onBack }) {
                             <p className="text-sm text-gray-700 italic break-words">{n.text}</p>
                           </div>
                           <button 
-                            onClick={() => handleDeleteNote(n.id)}
+                            onClick={() => handleDeleteNote(n.id, selectedUnitForDetail.id)}
                             className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition shrink-0"
                             title="Notu Sil"
                           >
@@ -1155,7 +1176,7 @@ export default function DenetimTakipApp({ onBack }) {
                     value={wheelCityFilter} onChange={e => setWheelCityFilter(e.target.value)}
                   >
                     <option value="all">Tüm İller</option>
-                    {uniqueCitiesList.map(city => <option key={city} value={city}>{city}</option>)}
+                    {activeCities.map(city => <option key={city} value={city}>{city}</option>)}
                   </select>
                 </div>
                 <div>

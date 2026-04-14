@@ -2,11 +2,96 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Plus, Trash2, Search, CheckCircle2, MapPin, 
   History, ArrowLeft, AlertCircle, List, Settings, Edit, 
-  Dna, Zap, FileText, X, ChevronRight, Shuffle, CalendarPlus, CalendarDays, Check
+  Dna, Zap, FileText, X, ChevronRight, Shuffle, CalendarPlus, CalendarDays, Check, AlertTriangle
 } from 'lucide-react';
 
 import { db, auth } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query, where, getDoc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query, where, getDoc, setDoc, writeBatch } from 'firebase/firestore';
+
+// --- TÜRKİYE İL VE İLÇE VERİSİ ---
+const TURKEY_DATA = {
+  "Adana": ["Aladağ", "Ceyhan", "Çukurova", "Feke", "İmamoğlu", "Karaisalı", "Karataş", "Kozan", "Pozantı", "Saimbeyli", "Sarıçam", "Seyhan", "Tufanbeyli", "Yumurtalık", "Yüreğir"],
+  "Adıyaman": ["Besni", "Çelikhan", "Gerger", "Gölbaşı", "Kahta", "Merkez", "Samsat", "Sincik", "Tut"],
+  "Afyonkarahisar": ["Başmakçı", "Bayat", "Bolvadin", "Çay", "Çobanlar", "Dazkırı", "Dinar", "Emirdağ", "Evciler", "Hocalar", "İhsaniye", "İscehisar", "Kızılören", "Merkez", "Sandıklı", "Sinanpaşa", "Sultandağı", "Şuhut"],
+  "Ağrı": ["Diyadin", "Doğubayazıt", "Eleşkirt", "Hamur", "Merkez", "Patnos", "Taşlıçay", "Tutak"],
+  "Amasya": ["Göynücek", "Gümüşhacıköy", "Hamamözü", "Merkez", "Merzifon", "Suluova", "Taşova"],
+  "Ankara": ["Akyurt", "Altındağ", "Ayaş", "Bala", "Beypazarı", "Çamlıdere", "Çankaya", "Çubuk", "Elmadağ", "Etimesgut", "Evren", "Gölbaşı", "Güdül", "Haymana", "Kahramankazan", "Kalecik", "Keçiören", "Kızılcahamam", "Mamak", "Nallıhan", "Polatlı", "Pursaklar", "Sincan", "Şereflikoçhisar", "Yenimahalle"],
+  "Antalya": ["Akseki", "Aksu", "Alanya", "Demre", "Döşemealtı", "Elmalı", "Finike", "Gazipaşa", "Gündoğmuş", "İbradı", "Kaş", "Kemer", "Kepez", "Konyaaltı", "Korkuteli", "Kumluca", "Manavgat", "Muratpaşa", "Serik"],
+  "Artvin": ["Ardanuç", "Arhavi", "Borçka", "Hopa", "Kemalpaşa", "Merkez", "Murgul", "Şavşat", "Yusufeli"],
+  "Aydın": ["Bozdoğan", "Buharkent", "Çine", "Didim", "Efeler", "Germencik", "İncirliova", "Karacasu", "Karpuzlu", "Koçarlı", "Köşk", "Kuşadası", "Kuyucak", "Nazilli", "Söke", "Sultanhisar", "Yenipazar"],
+  "Balıkesir": ["Altıeylül", "Ayvalık", "Balya", "Bandırma", "Bigadiç", "Burhaniye", "Dursunbey", "Edremit", "Erdek", "Gömeç", "Gönen", "Havran", "İvrindi", "Karesi", "Kepsut", "Manyas", "Marmara", "Savaştepe", "Sındırgı", "Susurluk"],
+  "Bilecik": ["Bozüyük", "Gölpazarı", "İnhisar", "Merkez", "Osmaneli", "Pazaryeri", "Söğüt", "Yenipazar"],
+  "Bingöl": ["Adaklı", "Genç", "Karlıova", "Kiğı", "Merkez", "Solhan", "Yayladere", "Yedisu"],
+  "Bitlis": ["Adilcevaz", "Ahlat", "Güroymak", "Hizan", "Merkez", "Mutki", "Tatvan"],
+  "Bolu": ["Dörtdivan", "Gerede", "Göynük", "Kıbrıscık", "Mengen", "Merkez", "Mudurnu", "Seben", "Yeniçağa"],
+  "Burdur": ["Ağlasun", "Altınyayla", "Bucak", "Çavdır", "Çeltikçi", "Gölhisar", "Karamanlı", "Kemer", "Merkez", "Tefenni", "Yeşilova"],
+  "Bursa": ["Büyükorhan", "Gemlik", "Gürsu", "Harmancık", "İnegöl", "İznik", "Karacabey", "Keles", "Kestel", "Mudanya", "Mustafakemalpaşa", "Nilüfer", "Orhaneli", "Orhangazi", "Osmangazi", "Yenişehir", "Yıldırım"],
+  "Çanakkale": ["Ayvacık", "Bayramiç", "Biga", "Bozcaada", "Çan", "Eceabat", "Ezine", "Gelibolu", "Gökçeada", "Lapseki", "Merkez", "Yenice"],
+  "Çankırı": ["Atkaracalar", "Bayramören", "Çerkeş", "Eldivan", "Ilgaz", "Kızılırmak", "Korgun", "Kurşunlu", "Merkez", "Orta", "Şabanözü", "Yapraklı"],
+  "Çorum": ["Alaca", "Bayat", "Boğazkale", "Dodurga", "İskilip", "Kargı", "Laçin", "Mecitözü", "Merkez", "Oğuzlar", "Ortaköy", "Osmancık", "Sungurlu", "Uğurludağ"],
+  "Denizli": ["Acıpayam", "Babadağ", "Baklan", "Bekilli", "Beyağaç", "Bozkurt", "Buldan", "Çal", "Çameli", "Çardak", "Çivril", "Güney", "Honaz", "Kale", "Merkezefendi", "Pamukkale", "Sarayköy", "Serinhisar", "Tavas"],
+  "Diyarbakır": ["Bağlar", "Bismil", "Çermik", "Çınar", "Çüngüş", "Dicle", "Eğil", "Ergani", "Hani", "Hazro", "Kayapınar", "Kocaköy", "Kulp", "Lice", "Silvan", "Sur", "Yenişehir"],
+  "Edirne": ["Enez", "Havsa", "İpsala", "Keşan", "Lalapaşa", "Meriç", "Merkez", "Süloğlu", "Uzunköprü"],
+  "Elazığ": ["Ağın", "Alacakaya", "Arıcak", "Baskil", "Karakoçan", "Keban", "Kovancılar", "Maden", "Merkez", "Palu", "Sivrice"],
+  "Erzincan": ["Çayırlı", "İliç", "Kemah", "Kemaliye", "Merkez", "Otlukbeli", "Refahiye", "Tercan", "Üzümlü"],
+  "Erzurum": ["Aşkale", "Aziziye", "Çat", "Hınıs", "Horasan", "İspir", "Karaçoban", "Karayazı", "Köprüköy", "Narman", "Oltu", "Olur", "Palandöken", "Pasinler", "Pazaryolu", "Şenkaya", "Tekman", "Tortum", "Uzundere", "Yakutiye"],
+  "Eskişehir": ["Alpu", "Beylikova", "Çifteler", "Günyüzü", "Han", "İnönü", "Mahmudiye", "Mihalgazi", "Mihalıççık", "Odunpazarı", "Sarıcakaya", "Seyitgazi", "Sivrihisar", "Tepebaşı"],
+  "Gaziantep": ["Araban", "İslahiye", "Karkamış", "Nizip", "Nurdağı", "Oğuzeli", "Şahinbey", "Şehitkamil", "Yavuzeli"],
+  "Giresun": ["Alucra", "Bulancak", "Çamoluk", "Çanakçı", "Dereli", "Doğankent", "Espiye", "Eynesil", "Görele", "Güce", "Keşap", "Merkez", "Piraziz", "Şebinkarahisar", "Tirebolu", "Yağlıdere"],
+  "Gümüşhane": ["Kelkit", "Köse", "Kürtün", "Merkez", "Şiran", "Torul"],
+  "Hakkari": ["Çukurca", "Derecik", "Merkez", "Şemdinli", "Yüksekova"],
+  "Hatay": ["Altınözü", "Antakya", "Arsuz", "Belen", "Defne", "Dörtyol", "Erzin", "Hassa", "İskenderun", "Kırıkhan", "Kumlu", "Payas", "Reyhanlı", "Samandağ", "Yayladağı"],
+  "Isparta": ["Aksu", "Atabey", "Eğirdir", "Gelendost", "Gönen", "Keçiborlu", "Merkez", "Senirkent", "Sütçüler", "Şarkikaraağaç", "Uluborlu", "Yalvaç", "Yenişarbademli"],
+  "Mersin": ["Akdeniz", "Anamur", "Aydıncık", "Bozyazı", "Çamlıyayla", "Erdemli", "Gülnar", "Mezitli", "Mut", "Silifke", "Tarsus", "Toroslar", "Yenişehir"],
+  "İstanbul": ["Adalar", "Arnavutköy", "Ataşehir", "Avcılar", "Bağcılar", "Bahçelievler", "Bakırköy", "Başakşehir", "Bayrampaşa", "Beşiktaş", "Beykoz", "Beylikdüzü", "Beyoğlu", "Büyükçekmece", "Çatalca", "Çekmeköy", "Esenler", "Esenyurt", "Eyüpsultan", "Fatih", "Gaziosmanpaşa", "Güngören", "Kadıköy", "Kağıthane", "Kartal", "Küçükçekmece", "Maltepe", "Pendik", "Sancaktepe", "Sarıyer", "Silivri", "Sultanbeyli", "Sultangazi", "Şile", "Şişli", "Tuzla", "Ümraniye", "Üsküdar", "Zeytinburnu"],
+  "İzmir": ["Aliağa", "Balçova", "Bayındır", "Bayraklı", "Bergama", "Beydağ", "Bornova", "Buca", "Çeşme", "Çiğli", "Dikili", "Foça", "Gaziemir", "Güzelbahçe", "Karabağlar", "Karaburun", "Karşıyaka", "Kemalpaşa", "Kınık", "Kiraz", "Konak", "Menderes", "Menemen", "Narlıdere", "Ödemiş", "Seferihisar", "Selçuk", "Tire", "Torbalı", "Urla"],
+  "Kars": ["Akyaka", "Arpaçay", "Digor", "Kağızman", "Merkez", "Sarıkamış", "Selim", "Susuz"],
+  "Kastamonu": ["Abana", "Ağlı", "Araç", "Azdavay", "Bozkurt", "Cide", "Çatalzeytin", "Daday", "Devrekani", "Doğanyurt", "Hanönü", "İhsangazi", "İnebolu", "Küre", "Merkez", "Pınarbaşı", "Seydiler", "Şenpazar", "Taşköprü", "Tosya"],
+  "Kayseri": ["Akkışla", "Bünyan", "Develi", "Felahiye", "Hacılar", "İncesu", "Kocasinan", "Melikgazi", "Özvatan", "Pınarbaşı", "Sarıoğlan", "Sarız", "Talas", "Tomarza", "Yahyalı", "Yeşilhisar"],
+  "Kırklareli": ["Babaeski", "Demirköy", "Kofçaz", "Lüleburgaz", "Merkez", "Pehlivanköy", "Pınarhisar", "Vize"],
+  "Kırşehir": ["Akçakent", "Akpınar", "Boztepe", "Çiçekdağı", "Kaman", "Merkez", "Mucur"],
+  "Kocaeli": ["Başiskele", "Çayırova", "Darıca", "Derince", "Dilovası", "Gebze", "Gölcük", "İzmit", "Kandıra", "Karamürsel", "Kartepe", "Körfez"],
+  "Konya": ["Ahırlı", "Akören", "Akşehir", "Altınekin", "Beyşehir", "Bozkır", "Cihanbeyli", "Çeltik", "Çumra", "Derbent", "Derebucak", "Doğanhisar", "Emirgazi", "Ereğli", "Güneysınır", "Hadim", "Halkapınar", "Hüyük", "Ilgın", "Kadınhanı", "Karapınar", "Karatay", "Kulu", "Meram", "Sarayönü", "Selçuklu", "Seydişehir", "Taşkent", "Tuzlukçu", "Yalıhüyük", "Yunak"],
+  "Kütahya": ["Altıntaş", "Aslanapa", "Çavdarhisar", "Domaniç", "Dumlupınar", "Emet", "Gediz", "Hisarcık", "Merkez", "Pazarlar", "Şaphane", "Simav", "Tavşanlı"],
+  "Malatya": ["Akçadağ", "Arapgir", "Arguvan", "Battalgazi", "Darende", "Doğanşehir", "Doğanyol", "Hekimhan", "Kale", "Kuluncak", "Pütürge", "Yazıhan", "Yeşilyurt"],
+  "Manisa": ["Ahmetli", "Akhisar", "Alaşehir", "Demirci", "Gölmarmara", "Gördes", "Kırkağaç", "Köprübaşı", "Kula", "Salihli", "Sarıgöl", "Saruhanlı", "Selendi", "Soma", "Şehzadeler", "Turgutlu", "Yunusemre"],
+  "Kahramanmaraş": ["Afşin", "Andırın", "Çağlayancerit", "Dulkadiroğlu", "Ekinözü", "Elbistan", "Göksun", "Nurhak", "Onikişubat", "Pazarcık", "Türkoğlu"],
+  "Mardin": ["Artuklu", "Dargeçit", "Derik", "Kızıltepe", "Mazıdağı", "Midyat", "Nusaybin", "Ömerli", "Savur", "Yeşilli"],
+  "Muğla": ["Bodrum", "Dalaman", "Datça", "Fethiye", "Kavaklıdere", "Köyceğiz", "Marmaris", "Menteşe", "Milas", "Ortaca", "Seydikemer", "Ula", "Yatağan"],
+  "Muş": ["Bulanık", "Hasköy", "Korkut", "Malazgirt", "Merkez", "Varto"],
+  "Nevşehir": ["Acıgöl", "Avanos", "Derinkuyu", "Gülşehir", "Hacıbektaş", "Kozaklı", "Merkez", "Ürgüp"],
+  "Niğde": ["Altunhisar", "Bor", "Çamardı", "Çiftlik", "Merkez", "Ulukışla"],
+  "Ordu": ["Akkuş", "Altınordu", "Aybastı", "Çamaş", "Çatalpınar", "Çaybaşı", "Fatsa", "Gölköy", "Gülyalı", "Gürgentepe", "İkizce", "Kabadüz", "Kabataş", "Korgan", "Kumru", "Mesudiye", "Perşembe", "Ulubey", "Ünye"],
+  "Rize": ["Ardeşen", "Çamlıhemşin", "Çayeli", "Derepazarı", "Fındıklı", "Güneysu", "Hemşin", "İkizdere", "İyidere", "Kalkandere", "Merkez", "Pazar"],
+  "Sakarya": ["Adapazarı", "Akyazı", "Arifiye", "Erenler", "Ferizli", "Geyve", "Hendek", "Karapürçek", "Karasu", "Kaynarca", "Kocaali", "Pamukova", "Sapanca", "Serdivan", "Söğütlü", "Taraklı"],
+  "Samsun": ["19 Mayıs", "Alaçam", "Asarcık", "Atakum", "Ayvacık", "Bafra", "Canik", "Çarşamba", "Havza", "İlkadım", "Kavak", "Ladik", "Salıpazarı", "Tekkeköy", "Terme", "Vezirköprü", "Yakakent"],
+  "Siirt": ["Baykan", "Eruh", "Kurtalan", "Merkez", "Pervari", "Şirvan", "Tillo"],
+  "Sinop": ["Ayancık", "Boyabat", "Dikmen", "Durağan", "Erfelek", "Gerze", "Merkez", "Saraydüzü", "Türkeli"],
+  "Sivas": ["Akıncılar", "Altınyayla", "Divriği", "Doğanşar", "Gemerek", "Gölova", "Gürün", "Hafik", "İmranlı", "Kangal", "Koyulhisar", "Merkez", "Suşehri", "Şarkışla", "Ulaş", "Yıldızeli", "Zara"],
+  "Tekirdağ": ["Çerkezköy", "Çorlu", "Ergene", "Hayrabolu", "Kapaklı", "Malkara", "Marmaraereğlisi", "Muratlı", "Saray", "Süleymanpaşa", "Şarköy"],
+  "Tokat": ["Almus", "Artova", "Başçiftlik", "Erbaa", "Merkez", "Niksar", "Pazar", "Reşadiye", "Sulusaray", "Turhal", "Yeşilyurt", "Zile"],
+  "Trabzon": ["Akçaabat", "Araklı", "Arsin", "Beşikdüzü", "Çarşıbaşı", "Çaykara", "Dernekpazarı", "Düzköy", "Hayrat", "Köprübaşı", "Maçka", "Of", "Ortahisar", "Sürmene", "Şalpazarı", "Tonya", "Vakfıkebir", "Yomra"],
+  "Tunceli": ["Çemişgezek", "Hozat", "Mazgirt", "Merkez", "Nazımiye", "Ovacık", "Pertek", "Pülümür"],
+  "Şanlıurfa": ["Akçakale", "Birecik", "Bozova", "Ceylanpınar", "Eyyübiye", "Halfeti", "Haliliye", "Harran", "Hilvan", "Karaköprü", "Siverek", "Suruç", "Viranşehir"],
+  "Uşak": ["Banaz", "Eşme", "Karahallı", "Merkez", "Sivaslı", "Ulubey"],
+  "Van": ["Bahçesaray", "Başkale", "Çaldıran", "Çatak", "Edremit", "Erciş", "Gevaş", "Gürpınar", "İpekyolu", "Muradiye", "Özalp", "Saray", "Tuşba"],
+  "Yozgat": ["Akdağmadeni", "Aydıncık", "Boğazlıyan", "Çandır", "Çayıralan", "Çekerek", "Kadışehri", "Merkez", "Saraykent", "Sarıkaya", "Sorgun", "Şefaatli", "Yenifakılı", "Yerköy"],
+  "Zonguldak": ["Alaplı", "Çaycuma", "Devrek", "Ereğli", "Gökçebey", "Kilimli", "Kozlu", "Merkez"],
+  "Aksaray": ["Ağaçören", "Eskil", "Gülağaç", "Güzelyurt", "Merkez", "Ortaköy", "Sarıyahşi", "Sultanhanı"],
+  "Bayburt": ["Aydıntepe", "Demirözü", "Merkez"],
+  "Karaman": ["Ayrancı", "Başyayla", "Ermenek", "Kazımkarabekir", "Merkez", "Sarıveliler"],
+  "Kırıkkale": ["Bahşılı", "Balışeyh", "Çelebi", "Delice", "Karakeçili", "Merkez", "Sulakyurt", "Yahşihan"],
+  "Batman": ["Beşiri", "Gercüş", "Hasankeyf", "Kozluk", "Merkez", "Sason"],
+  "Şırnak": ["Beytüşşebap", "Cizre", "Güçlükonak", "İdil", "Merkez", "Silopi", "Uludere"],
+  "Bartın": ["Amasra", "Kurucaşile", "Merkez", "Ulus"],
+  "Ardahan": ["Çıldır", "Damal", "Göle", "Hanak", "Merkez", "Posof"],
+  "Iğdır": ["Aralık", "Karakoyunlu", "Merkez", "Tuzluca"],
+  "Yalova": ["Altınova", "Armutlu", "Çınarcık", "Çiftlikköy", "Merkez", "Termal"],
+  "Karabük": ["Eflani", "Eskipazar", "Merkez", "Ovacık", "Safranbolu", "Yenice"],
+  "Kilis": ["Elbeyli", "Merkez", "Musabeyli", "Polateli"],
+  "Osmaniye": ["Bahçe", "Düziçi", "Hasanbeyli", "Kadirli", "Merkez", "Sumbas", "Toprakkale"],
+  "Düzce": ["Akçakoca", "Cumayeri", "Çilimli", "Gölyaka", "Gümüşova", "Kaynaşlı", "Merkez", "Yığılca"]
+};
 
 // Yerel saat dilimine göre YYYY-MM-DD formatında tarihi almak için yardımcı fonksiyon
 const getLocalYYYYMMDD = (dateObj = new Date()) => {
@@ -26,6 +111,11 @@ export default function DenetimTakipApp({ onBack }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState(''); 
+
+  // DENETİM NOT MODALI İÇİN STATE
+  // pendingAudit = { unitId, date, planId (varsa), step: 'ask' | 'note' }
+  const [pendingAudit, setPendingAudit] = useState(null);
+  const [pendingAuditNote, setPendingAuditNote] = useState('');
   
   // FİLTRELEME DURUMLARI
   const [urgencyFilter, setUrgencyFilter] = useState('all'); 
@@ -52,27 +142,6 @@ export default function DenetimTakipApp({ onBack }) {
       return;
     }
 
-    const initializeDefaultUnits = async () => {
-      try {
-        const flagRef = doc(db, 'kullanici_ayarlari', uid);
-        const flagSnap = await getDoc(flagRef);
-
-        if (!flagSnap.exists() || !flagSnap.data().baslangicBirimleriEklendi) {
-          const defaultUnits = [
-            { city: 'Aydın', district: 'Efeler', name: 'Merkez' },
-            { city: 'İzmir', district: 'Buca', name: 'Fırat Mahallesi' }
-          ];
-
-          for (const u of defaultUnits) {
-            await addDoc(collection(db, 'bireysel_birimler'), { ...u, userId: uid, notes: '', notesList: [] });
-          }
-          await setDoc(flagRef, { baslangicBirimleriEklendi: true }, { merge: true });
-        }
-      } catch (err) {}
-    };
-
-    initializeDefaultUnits();
-
     try {
       const qUnits = query(collection(db, 'bireysel_birimler'), where("userId", "==", uid));
       const unsubUnits = onSnapshot(qUnits, (snapshot) => {
@@ -98,10 +167,6 @@ export default function DenetimTakipApp({ onBack }) {
       setErrorMsg("Bağlantı hatası!");
     }
   }, []);
-
-  const availableCities = useMemo(() => {
-    return [...new Set(units.map(u => u.city))].sort((a, b) => a.localeCompare(b, 'tr'));
-  }, [units]);
 
   const formatDateDisplay = (dateString) => {
     if (!dateString) return 'Kayıt Yok';
@@ -148,6 +213,54 @@ export default function DenetimTakipApp({ onBack }) {
     return `${days} Gün`;
   };
 
+  // --- ZİYARET EKLEME & NOT MODALI İŞLEMLERİ ---
+  const appendNoteToUnit = async (unitId, noteText) => {
+    const unit = units.find(u => u.id === unitId);
+    if (!unit) return;
+    const newNoteObj = {
+      id: Date.now().toString(),
+      date: new Date().toISOString(),
+      text: noteText.trim()
+    };
+    const currentNotes = unit.notesList || [];
+    const updatedNotes = [newNoteObj, ...currentNotes];
+    await updateDoc(doc(db, 'bireysel_birimler', unitId), { notesList: updatedNotes });
+  };
+
+  // Modaldan gelen onayla asıl kayıt işlemini yapan fonksiyon
+  const executeAuditSave = async (withNote) => {
+    if (!pendingAudit) return;
+    const { unitId, date, planId } = pendingAudit;
+    const uid = auth.currentUser?.uid;
+    
+    try {
+        // İstenmişse ve not boş değilse şubeye notu ekle
+        if (withNote && pendingAuditNote.trim()) {
+            await appendNoteToUnit(unitId, pendingAuditNote);
+        }
+        
+        // Denetim kaydını ekle
+        await addDoc(collection(db, 'bireysel_denetimler'), { unitId, date, userId: uid });
+        
+        // Bu bir plan tamamlama işleminden geliyorsa planı sil
+        if (planId) {
+            await deleteDoc(doc(db, 'bireysel_planlar', planId));
+        }
+        
+        showSuccess('Ziyaret başarıyla eklendi.');
+        
+        // Eğer Seri Ekleden geliyorsa seçim kutusunu temizle
+        if (!planId && date === newAudit.date && unitId === newAudit.unitId) {
+            setNewAudit({...newAudit, unitId: ''});
+        }
+        
+        setPendingAudit(null);
+        setPendingAuditNote('');
+    } catch (err) {
+        setErrorMsg("Hata oluştu: " + err.message);
+    }
+  };
+
   // --- TEMEL İŞLEMLER ---
   const handleAddUnit = async () => {
     const uid = auth.currentUser?.uid;
@@ -163,42 +276,27 @@ export default function DenetimTakipApp({ onBack }) {
     }
   };
 
-  const handleAddAudit = async () => {
-    const uid = auth.currentUser?.uid;
-    if (newAudit.unitId && newAudit.date && uid) {
-      
-      // KURAL: Aynı şubeye aynı gün 1'den fazla kayıt eklenmesini engelle
+  const handleAddAudit = () => {
+    if (newAudit.unitId && newAudit.date) {
       const isAlreadyVisited = audits.some(a => a.unitId === newAudit.unitId && a.date === newAudit.date);
       if (isAlreadyVisited) {
         setErrorMsg('Bu şubeye seçilen tarihte zaten bir ziyaret kaydı var!');
         return;
       }
-
-      try {
-        await addDoc(collection(db, 'bireysel_denetimler'), { unitId: newAudit.unitId, date: newAudit.date, userId: uid });
-        setNewAudit({...newAudit, unitId: ''}); 
-        showSuccess('Denetim başarıyla eklendi.');
-      } catch (error) { setErrorMsg(`Hata: ${error.message}`); }
+      setPendingAudit({ unitId: newAudit.unitId, date: newAudit.date, step: 'ask' });
     }
   };
 
-  const handleQuickAddAudit = async (unitId, e) => {
+  const handleQuickAddAudit = (unitId, e) => {
     e.stopPropagation();
-    const uid = auth.currentUser?.uid;
     const today = getLocalYYYYMMDD();
-    if (unitId && uid) {
-      
-      // KURAL: Bugün zaten gidilmiş mi?
+    if (unitId) {
       const isAlreadyVisited = audits.some(a => a.unitId === unitId && a.date === today);
       if (isAlreadyVisited) {
         setErrorMsg('Bu şubeye bugün zaten gidildi!');
         return;
       }
-
-      try {
-        await addDoc(collection(db, 'bireysel_denetimler'), { unitId: unitId, date: today, userId: uid });
-        showSuccess('Bugün gidildi olarak işaretlendi.');
-      } catch (error) { setErrorMsg(`Hata: ${error.message}`); }
+      setPendingAudit({ unitId: unitId, date: today, step: 'ask' });
     }
   };
 
@@ -208,34 +306,79 @@ export default function DenetimTakipApp({ onBack }) {
     }
   };
 
+  // YÖNETİM SEKMESİ ŞUBE SİLME (BİRİM VE TÜM GEÇMİŞİ)
+  const handleDeleteUnit = async (unitId) => {
+    if(window.confirm('Bu şubeyi silmek istediğinize emin misiniz?')) {
+      try {
+        const batch = writeBatch(db);
+        batch.delete(doc(db, 'bireysel_birimler', unitId));
+        
+        const relatedAudits = audits.filter(a => a.unitId === unitId);
+        relatedAudits.forEach(a => batch.delete(doc(db, 'bireysel_denetimler', a.id)));
+        
+        const relatedPlans = plans.filter(p => p.unitId === unitId);
+        relatedPlans.forEach(p => batch.delete(doc(db, 'bireysel_planlar', p.id)));
+        
+        await batch.commit();
+        showSuccess('Şube ve tüm geçmiş kayıtları tamamen silindi.');
+      } catch (e) {
+        setErrorMsg('Silinemedi: ' + e.message);
+      }
+    }
+  };
+
+  // YÖNETİM SEKMESİ HER ŞEYİ SIFIRLA (3 KERE ONAY)
+  const handleFactoryReset = async () => {
+    if (!window.confirm("DİKKAT: Tüm şubeleriniz, denetim geçmişiniz ve planlarınız silinecek. Emin misiniz?")) return;
+    if (!window.confirm("BU İŞLEM GERİ ALINAMAZ. Gerçekten her şeyi silmek istiyor musunuz?")) return;
+    if (!window.confirm("Son kararınız mı? Devam ederseniz sisteminiz tamamen sıfırlanacak!")) return;
+
+    try {
+      const batch = writeBatch(db);
+      units.forEach(u => batch.delete(doc(db, 'bireysel_birimler', u.id)));
+      audits.forEach(a => batch.delete(doc(db, 'bireysel_denetimler', a.id)));
+      plans.forEach(p => batch.delete(doc(db, 'bireysel_planlar', p.id)));
+      
+      await batch.commit();
+      showSuccess('Tüm verileriniz başarıyla sıfırlandı.');
+      setActiveTab('dashboard');
+    } catch (e) {
+      setErrorMsg('Sıfırlama başarısız: ' + e.message);
+    }
+  };
+
   // --- PLANLAMA İŞLEMLERİ ---
   const handleAddPlan = async (unitId, date) => {
     const uid = auth.currentUser?.uid;
-    if (!unitId || !date || !uid) return;
-    try {
-      await addDoc(collection(db, 'bireysel_planlar'), { unitId, date, userId: uid });
-      showSuccess(`${formatDateDisplay(date)} tarihine plan eklendi.`);
-    } catch (err) { setErrorMsg("Plan eklenirken hata oluştu."); }
-  };
-
-  const handleCompletePlan = async (plan, e) => {
-    e?.stopPropagation();
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
-
-    // KURAL: Plan tamamlanırken de aynı gün kontrolü yap
-    const isAlreadyVisited = audits.some(a => a.unitId === plan.unitId && a.date === plan.date);
-    if (isAlreadyVisited) {
-      setErrorMsg('Bu şubeye planlanan tarihte zaten gidilmiş! Çakışan plan listeden siliniyor...');
-      await deleteDoc(doc(db, 'bireysel_planlar', plan.id));
-      return;
+    if (!unitId || !date || !uid) return false;
+    
+    const isAlreadyPlanned = plans.some(p => p.unitId === unitId && p.date === date);
+    if (isAlreadyPlanned) {
+        setErrorMsg('Bu şubeye bu tarih için zaten bir plan var!');
+        return false;
     }
 
     try {
-      await addDoc(collection(db, 'bireysel_denetimler'), { unitId: plan.unitId, date: plan.date, userId: uid });
-      await deleteDoc(doc(db, 'bireysel_planlar', plan.id));
-      showSuccess('Plan tamamlandı ve denetim eklendi.');
-    } catch (err) { setErrorMsg("İşlem sırasında hata oluştu."); }
+      await addDoc(collection(db, 'bireysel_planlar'), { unitId, date, userId: uid });
+      showSuccess(`${formatDateDisplay(date)} tarihine plan eklendi.`);
+      return true;
+    } catch (err) { 
+      setErrorMsg("Plan eklenirken hata oluştu."); 
+      return false;
+    }
+  };
+
+  const handleCompletePlan = (plan, e) => {
+    e?.stopPropagation();
+    const isAlreadyVisited = audits.some(a => a.unitId === plan.unitId && a.date === plan.date);
+    
+    if (isAlreadyVisited) {
+      setErrorMsg('Bu şubeye planlanan tarihte zaten gidilmiş! Çakışan plan listeden siliniyor...');
+      deleteDoc(doc(db, 'bireysel_planlar', plan.id)).catch(()=>{});
+      return;
+    }
+
+    setPendingAudit({ unitId: plan.unitId, date: plan.date, planId: plan.id, step: 'ask' });
   };
 
   const handleDeletePlan = async (planId, e) => {
@@ -243,25 +386,17 @@ export default function DenetimTakipApp({ onBack }) {
     try { await deleteDoc(doc(db, 'bireysel_planlar', planId)); } catch (err) {}
   };
 
-  // --- NOT İŞLEMLERİ ---
+  // --- ŞUBE DETAY İÇİNDEN NOT İŞLEMLERİ ---
   const handleSaveNote = async () => {
     if(!selectedUnitForDetail || !unitNote.trim()) return;
     setIsSavingNote(true);
     try {
-      const newNoteObj = {
-        id: Date.now().toString(),
-        date: new Date().toISOString(),
-        text: unitNote.trim()
-      };
-      
+      await appendNoteToUnit(selectedUnitForDetail.id, unitNote);
+      // Listeyi anlık güncel tutmak için
+      const newNoteObj = { id: Date.now().toString(), date: new Date().toISOString(), text: unitNote.trim() };
       const currentNotes = selectedUnitForDetail.notesList || [];
-      const updatedNotes = [newNoteObj, ...currentNotes];
-
-      await updateDoc(doc(db, 'bireysel_birimler', selectedUnitForDetail.id), {
-        notesList: updatedNotes
-      });
+      setSelectedUnitForDetail({...selectedUnitForDetail, notesList: [newNoteObj, ...currentNotes]});
       
-      setSelectedUnitForDetail({...selectedUnitForDetail, notesList: updatedNotes});
       setUnitNote('');
       showSuccess('Not başarıyla eklendi.');
     } catch(err) {
@@ -289,6 +424,7 @@ export default function DenetimTakipApp({ onBack }) {
 
   // --- VERİ HAZIRLIĞI ---
   const unitStats = useMemo(() => {
+    const searchTR = searchTerm.toLocaleLowerCase('tr-TR');
     return units
       .map(unit => {
         const unitAudits = audits.filter(a => a.unitId === unit.id);
@@ -302,10 +438,12 @@ export default function DenetimTakipApp({ onBack }) {
           nextPlan: unitPlans.length > 0 ? unitPlans[0] : null
         };
       })
-      .filter(u => 
-        u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        u.district.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+      .filter(u => {
+        const uName = u.name.toLocaleLowerCase('tr-TR');
+        const uDist = u.district.toLocaleLowerCase('tr-TR');
+        const uCity = u.city.toLocaleLowerCase('tr-TR');
+        return uName.includes(searchTR) || uDist.includes(searchTR) || uCity.includes(searchTR);
+      })
       .filter(u => selectedCityFilter === 'all' || u.city === selectedCityFilter)
       .filter(u => {
         if (urgencyFilter === 'all') return true;
@@ -346,6 +484,8 @@ export default function DenetimTakipApp({ onBack }) {
     { label: '31-44 G', value: '31-44', color: 'bg-orange-500' },
     { label: '45+ G', value: '45+', color: 'bg-red-600' }
   ];
+
+  const uniqueCitiesList = useMemo(() => Object.keys(TURKEY_DATA).sort((a,b) => a.localeCompare(b, 'tr')), []);
 
   // ÇARK SİSTEMİ MANTIĞI
   const handleSpinWheel = () => {
@@ -397,8 +537,75 @@ export default function DenetimTakipApp({ onBack }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 font-sans">
+    <div className="min-h-screen bg-gray-50 pb-20 font-sans relative">
       
+      {/* --- ZİYARET ONAY & NOT MODALI --- */}
+      {pendingAudit && (
+         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+               {pendingAudit.step === 'ask' ? (
+                  <div className="p-6 text-center">
+                     <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <CheckCircle2 size={32} />
+                     </div>
+                     <h3 className="font-bold text-lg text-gray-800 mb-2">Gidildi Olarak İşaretle</h3>
+                     <p className="text-sm text-gray-500 mb-6">Bu ziyarete özel bir not eklemek ister misiniz?</p>
+                     
+                     <div className="flex gap-3">
+                        <button 
+                          onClick={() => executeAuditSave(false)} 
+                          className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold active:bg-gray-200 transition"
+                        >
+                          Hayır,<br/>Direkt Kaydet
+                        </button>
+                        <button 
+                          onClick={() => setPendingAudit({...pendingAudit, step: 'note'})} 
+                          className="flex-1 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold active:bg-blue-700 transition shadow-md shadow-blue-200"
+                        >
+                          Evet,<br/>Not Ekle
+                        </button>
+                     </div>
+                     
+                     <button 
+                       onClick={() => setPendingAudit(null)} 
+                       className="w-full mt-4 py-2 text-gray-400 font-bold text-xs"
+                     >
+                       İşlemi İptal Et
+                     </button>
+                  </div>
+               ) : (
+                  <div className="p-6">
+                     <h3 className="font-bold text-lg text-gray-800 mb-3 flex items-center gap-2">
+                       <FileText size={18} className="text-blue-500"/> Ziyaret Notunuz
+                     </h3>
+                     <textarea 
+                        autoFocus
+                        value={pendingAuditNote}
+                        onChange={e => setPendingAuditNote(e.target.value)}
+                        placeholder="Şubedeki gözlemleriniz vb..."
+                        className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:ring-2 focus:ring-blue-500 outline-none min-h-[120px] mb-4"
+                     />
+                     <div className="flex gap-3">
+                        <button 
+                          onClick={() => setPendingAudit(null)} 
+                          className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold active:bg-gray-200 transition"
+                        >
+                          Vazgeç
+                        </button>
+                        <button 
+                          onClick={() => executeAuditSave(true)} 
+                          disabled={!pendingAuditNote.trim()} 
+                          className="flex-1 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold disabled:opacity-50 active:bg-blue-700 transition"
+                        >
+                          Notla Kaydet
+                        </button>
+                     </div>
+                  </div>
+               )}
+            </div>
+         </div>
+      )}
+
       {/* ÜST BAŞLIK BARI */}
       <div className="bg-white px-4 pt-6 pb-4 shadow-sm flex items-center justify-between sticky top-0 z-40">
         <button 
@@ -425,7 +632,7 @@ export default function DenetimTakipApp({ onBack }) {
 
       {/* UYARI VE BAŞARI MESAJLARI */}
       {errorMsg && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 m-4 rounded-r-xl flex items-center justify-between gap-3 animate-in fade-in">
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 m-4 rounded-r-xl flex items-center justify-between gap-3 animate-in fade-in z-50 relative">
           <div className="flex items-center gap-3">
             <AlertCircle className="text-red-500 shrink-0" size={20} />
             <p className="text-sm font-medium text-red-700">{errorMsg}</p>
@@ -434,7 +641,7 @@ export default function DenetimTakipApp({ onBack }) {
         </div>
       )}
       {successMsg && (
-        <div className="bg-green-50 border-l-4 border-green-500 p-4 m-4 rounded-r-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+        <div className="bg-green-50 border-l-4 border-green-500 p-4 m-4 rounded-r-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2 z-50 relative">
           <CheckCircle2 className="text-green-500 shrink-0" size={20} />
           <p className="text-sm font-medium text-green-700">{successMsg}</p>
         </div>
@@ -479,7 +686,7 @@ export default function DenetimTakipApp({ onBack }) {
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input 
                   type="text" 
-                  placeholder="Ara..." 
+                  placeholder="Şube veya İlçe Ara..." 
                   className="w-full pl-10 pr-3 py-3.5 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition font-medium text-sm"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -491,7 +698,7 @@ export default function DenetimTakipApp({ onBack }) {
                 onChange={(e) => setSelectedCityFilter(e.target.value)}
               >
                 <option value="all">İl</option>
-                {availableCities.map(city => <option key={city} value={city}>{city}</option>)}
+                {uniqueCitiesList.map(city => <option key={city} value={city}>{city}</option>)}
               </select>
             </div>
 
@@ -506,6 +713,11 @@ export default function DenetimTakipApp({ onBack }) {
                   {f.label}
                 </button>
               ))}
+            </div>
+
+            {/* TOPLAM LİSTELENEN ŞUBE BİLGİSİ */}
+            <div className="px-2 text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-[-5px]">
+              Toplam Listelenen: <span className="text-blue-500">{unitStats.length} Şube</span>
             </div>
 
             {/* BİRİM KARTLARI */}
@@ -698,7 +910,7 @@ export default function DenetimTakipApp({ onBack }) {
                   </button>
                 </div>
 
-                {/* GEÇMİŞ NOTLAR (SİLME ÖZELLİĞİ EKLENDİ) */}
+                {/* GEÇMİŞ NOTLAR */}
                 {unitNotes.length > 0 && (
                   <div className="space-y-2 mt-4">
                     <label className="text-[10px] font-bold text-gray-400 uppercase">Geçmiş Notlar</label>
@@ -771,7 +983,7 @@ export default function DenetimTakipApp({ onBack }) {
                     value={wheelCityFilter} onChange={e => setWheelCityFilter(e.target.value)}
                   >
                     <option value="all">Tüm İller</option>
-                    {availableCities.map(city => <option key={city} value={city}>{city}</option>)}
+                    {uniqueCitiesList.map(city => <option key={city} value={city}>{city}</option>)}
                   </select>
                 </div>
                 <div>
@@ -805,8 +1017,14 @@ export default function DenetimTakipApp({ onBack }) {
                     
                     <div className="flex gap-2 justify-center mt-2">
                       <button 
-                        onClick={() => handleAddPlan(wheelResult.id, getLocalYYYYMMDD())}
-                        className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1 transition"
+                        onClick={async () => {
+                           const success = await handleAddPlan(wheelResult.id, getLocalYYYYMMDD());
+                           if (success) {
+                              setWheelResult(null);
+                              setFlashingUnitName('');
+                           }
+                        }}
+                        className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1 transition shadow-lg shadow-purple-600/30"
                       >
                         <CalendarPlus size={14}/> Bugüne Planla
                       </button>
@@ -904,40 +1122,107 @@ export default function DenetimTakipApp({ onBack }) {
         {/* BİRİM YÖNETİMİ EKRANI */}
         {activeTab === 'units' && (
            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+             
+             {/* YENİ ŞUBE EKLE KARTI */}
              <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
               <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <MapPin className="text-green-600" /> Yeni Birim Ekle
+                <MapPin className="text-green-600" /> Yeni Şube Ekle
               </h2>
               <div className="space-y-4">
-                <input 
-                  type="text" 
-                  placeholder="İl (Örn: İzmir)" 
-                  className="w-full p-4 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700 text-sm transition"
-                  value={newUnit.city}
-                  onChange={(e) => setNewUnit({...newUnit, city: e.target.value})}
-                />
-                <input 
-                  type="text" 
-                  placeholder="İlçe / Bölge (Örn: Buca)" 
-                  className="w-full p-4 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700 text-sm transition"
-                  value={newUnit.district}
-                  onChange={(e) => setNewUnit({...newUnit, district: e.target.value})}
-                />
-                <input 
-                  type="text" 
-                  placeholder="Birim Adı" 
-                  className="w-full p-4 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700 text-sm transition"
-                  value={newUnit.name}
-                  onChange={(e) => setNewUnit({...newUnit, name: e.target.value})}
-                />
+                
+                {/* İL SEÇİMİ */}
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">İl Seçiniz</label>
+                  <select 
+                    className="w-full p-3.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700 text-sm transition"
+                    value={newUnit.city}
+                    onChange={(e) => setNewUnit({...newUnit, city: e.target.value, district: ''})}
+                  >
+                    <option value="">İl Seçin...</option>
+                    {uniqueCitiesList.map(city => <option key={city} value={city}>{city}</option>)}
+                  </select>
+                </div>
+
+                {/* İLÇE SEÇİMİ */}
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">İlçe Seçiniz</label>
+                  <select 
+                    disabled={!newUnit.city}
+                    className="w-full p-3.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700 text-sm transition disabled:opacity-50"
+                    value={newUnit.district}
+                    onChange={(e) => setNewUnit({...newUnit, district: e.target.value})}
+                  >
+                    <option value="">{newUnit.city ? 'İlçe Seçin...' : 'Önce İl Seçin'}</option>
+                    {newUnit.city && TURKEY_DATA[newUnit.city]?.map(dist => <option key={dist} value={dist}>{dist}</option>)}
+                  </select>
+                </div>
+
+                {/* MANUEL BİRİM ADI */}
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Şube/Birim Adı</label>
+                  <input 
+                    type="text" 
+                    placeholder="Örn: Fırat Mahallesi" 
+                    className="w-full p-3.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700 text-sm transition"
+                    value={newUnit.name}
+                    onChange={(e) => setNewUnit({...newUnit, name: e.target.value})}
+                  />
+                </div>
+
                 <button 
                   onClick={handleAddUnit}
-                  className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold text-base hover:bg-gray-800 active:bg-black transition shadow-lg shadow-gray-200/50 mt-2"
+                  disabled={!newUnit.city || !newUnit.district || !newUnit.name}
+                  className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold text-base hover:bg-gray-800 active:bg-black transition shadow-lg shadow-gray-200/50 mt-2 disabled:opacity-50"
                 >
                   Sisteme Kaydet
                 </button>
               </div>
             </div>
+
+            {/* MEVCUT BİRİMLER LİSTESİ */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="p-4 border-b border-gray-50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <List size={18} className="text-blue-500" />
+                  <span className="font-bold text-gray-800">Kayıtlı Şubeleriniz</span>
+                </div>
+                <span className="text-xs font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded">{units.length} Adet</span>
+              </div>
+              <div className="divide-y divide-gray-50 max-h-[350px] overflow-y-auto">
+                {units.length === 0 && <p className="text-sm text-gray-400 italic p-4 text-center">Sistemde şubeniz bulunmuyor.</p>}
+                {units.sort((a,b) => a.city.localeCompare(b.city,'tr')).map(unit => (
+                  <div key={unit.id} className="p-4 flex justify-between items-center hover:bg-gray-50 transition group">
+                    <div>
+                      <p className="font-bold text-sm text-gray-800">{unit.name}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1">
+                        <MapPin size={10}/> {unit.district} / {unit.city}
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => handleDeleteUnit(unit.id)}
+                      className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition"
+                      title="Şubeyi Sil"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* FABRİKA AYARLARINA SIFIRLAMA */}
+            <div className="pt-6">
+              <button 
+                onClick={handleFactoryReset}
+                className="w-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 py-4 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2"
+              >
+                <AlertTriangle size={18} /> Tüm Verilerimi Sıfırla
+              </button>
+              <p className="text-[10px] text-center text-gray-400 mt-2 px-4">
+                Bu işlem şubelerinizi, tüm geçmiş denetimleri ve planları kalıcı olarak siler!
+              </p>
+            </div>
+
            </div>
         )}
 

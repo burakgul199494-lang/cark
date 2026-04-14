@@ -18,14 +18,14 @@ const getLocalYYYYMMDD = (dateObj = new Date()) => {
 export default function DenetimTakipApp({ onBack }) {
   const [units, setUnits] = useState([]);
   const [audits, setAudits] = useState([]);
-  const [plans, setPlans] = useState([]); // YENİ: Planlar State'i
+  const [plans, setPlans] = useState([]); 
 
   const [newUnit, setNewUnit] = useState({ city: '', district: '', name: '' });
   const [newAudit, setNewAudit] = useState({ unitId: '', date: getLocalYYYYMMDD() });
   const [activeTab, setActiveTab] = useState('dashboard'); 
   const [searchTerm, setSearchTerm] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState(''); // Başarı mesajları için
+  const [successMsg, setSuccessMsg] = useState(''); 
   
   // FİLTRELEME DURUMLARI
   const [urgencyFilter, setUrgencyFilter] = useState('all'); 
@@ -34,7 +34,7 @@ export default function DenetimTakipApp({ onBack }) {
   // DETAY VE NOT DURUMLARI
   const [selectedUnitForDetail, setSelectedUnitForDetail] = useState(null);
   const [unitNote, setUnitNote] = useState('');
-  const [planDate, setPlanDate] = useState(getLocalYYYYMMDD()); // YENİ: Plan tarihi
+  const [planDate, setPlanDate] = useState(getLocalYYYYMMDD()); 
   const [isSavingNote, setIsSavingNote] = useState(false);
 
   // ÇARK / KURA DURUMLARI
@@ -84,7 +84,6 @@ export default function DenetimTakipApp({ onBack }) {
         setAudits(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       });
 
-      // YENİ: Planları Çekme
       const qPlans = query(collection(db, 'bireysel_planlar'), where("userId", "==", uid));
       const unsubPlans = onSnapshot(qPlans, (snapshot) => {
         setPlans(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -167,6 +166,14 @@ export default function DenetimTakipApp({ onBack }) {
   const handleAddAudit = async () => {
     const uid = auth.currentUser?.uid;
     if (newAudit.unitId && newAudit.date && uid) {
+      
+      // KURAL: Aynı şubeye aynı gün 1'den fazla kayıt eklenmesini engelle
+      const isAlreadyVisited = audits.some(a => a.unitId === newAudit.unitId && a.date === newAudit.date);
+      if (isAlreadyVisited) {
+        setErrorMsg('Bu şubeye seçilen tarihte zaten bir ziyaret kaydı var!');
+        return;
+      }
+
       try {
         await addDoc(collection(db, 'bireysel_denetimler'), { unitId: newAudit.unitId, date: newAudit.date, userId: uid });
         setNewAudit({...newAudit, unitId: ''}); 
@@ -180,6 +187,14 @@ export default function DenetimTakipApp({ onBack }) {
     const uid = auth.currentUser?.uid;
     const today = getLocalYYYYMMDD();
     if (unitId && uid) {
+      
+      // KURAL: Bugün zaten gidilmiş mi?
+      const isAlreadyVisited = audits.some(a => a.unitId === unitId && a.date === today);
+      if (isAlreadyVisited) {
+        setErrorMsg('Bu şubeye bugün zaten gidildi!');
+        return;
+      }
+
       try {
         await addDoc(collection(db, 'bireysel_denetimler'), { unitId: unitId, date: today, userId: uid });
         showSuccess('Bugün gidildi olarak işaretlendi.');
@@ -207,6 +222,15 @@ export default function DenetimTakipApp({ onBack }) {
     e?.stopPropagation();
     const uid = auth.currentUser?.uid;
     if (!uid) return;
+
+    // KURAL: Plan tamamlanırken de aynı gün kontrolü yap
+    const isAlreadyVisited = audits.some(a => a.unitId === plan.unitId && a.date === plan.date);
+    if (isAlreadyVisited) {
+      setErrorMsg('Bu şubeye planlanan tarihte zaten gidilmiş! Çakışan plan listeden siliniyor...');
+      await deleteDoc(doc(db, 'bireysel_planlar', plan.id));
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'bireysel_denetimler'), { unitId: plan.unitId, date: plan.date, userId: uid });
       await deleteDoc(doc(db, 'bireysel_planlar', plan.id));
@@ -219,7 +243,7 @@ export default function DenetimTakipApp({ onBack }) {
     try { await deleteDoc(doc(db, 'bireysel_planlar', planId)); } catch (err) {}
   };
 
-  // --- NOT İŞLEMLERİ (GÜNCELLENDİ) ---
+  // --- NOT İŞLEMLERİ ---
   const handleSaveNote = async () => {
     if(!selectedUnitForDetail || !unitNote.trim()) return;
     setIsSavingNote(true);
@@ -244,6 +268,23 @@ export default function DenetimTakipApp({ onBack }) {
       setErrorMsg("Not kaydedilemedi.");
     }
     setIsSavingNote(false);
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    if(!window.confirm('Bu notu silmek istediğinize emin misiniz?')) return;
+    try {
+      const currentNotes = selectedUnitForDetail.notesList || [];
+      const updatedNotes = currentNotes.filter(n => n.id !== noteId);
+
+      await updateDoc(doc(db, 'bireysel_birimler', selectedUnitForDetail.id), {
+        notesList: updatedNotes
+      });
+
+      setSelectedUnitForDetail({...selectedUnitForDetail, notesList: updatedNotes});
+      showSuccess('Not başarıyla silindi.');
+    } catch(err) {
+      setErrorMsg("Not silinirken hata oluştu.");
+    }
   };
 
   // --- VERİ HAZIRLIĞI ---
@@ -351,6 +392,8 @@ export default function DenetimTakipApp({ onBack }) {
     setUnitNote('');
     setPlanDate(getLocalYYYYMMDD());
     setActiveTab('unitDetail');
+    setErrorMsg('');
+    setSuccessMsg('');
   };
 
   return (
@@ -382,9 +425,12 @@ export default function DenetimTakipApp({ onBack }) {
 
       {/* UYARI VE BAŞARI MESAJLARI */}
       {errorMsg && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 m-4 rounded-r-xl flex items-center gap-3">
-          <AlertCircle className="text-red-500 shrink-0" size={20} />
-          <p className="text-sm font-medium text-red-700">{errorMsg}</p>
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 m-4 rounded-r-xl flex items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="text-red-500 shrink-0" size={20} />
+            <p className="text-sm font-medium text-red-700">{errorMsg}</p>
+          </div>
+          <button onClick={() => setErrorMsg('')}><X size={16} className="text-red-400"/></button>
         </div>
       )}
       {successMsg && (
@@ -400,7 +446,7 @@ export default function DenetimTakipApp({ onBack }) {
         {activeTab === 'dashboard' && (
           <div className="space-y-4 animate-in fade-in duration-300">
             
-            {/* BUGÜNÜN PLANLARI (YENİ) */}
+            {/* BUGÜNÜN PLANLARI */}
             {todaysPlans.length > 0 && (
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-4 shadow-lg text-white">
                 <h3 className="font-bold text-sm flex items-center gap-2 mb-3 opacity-90">
@@ -414,10 +460,10 @@ export default function DenetimTakipApp({ onBack }) {
                         <p className="text-[10px] opacity-75">{plan.district}</p>
                       </div>
                       <div className="flex gap-2 shrink-0">
-                        <button onClick={(e) => handleDeletePlan(plan.id, e)} className="p-2 bg-red-500/20 text-red-100 rounded-lg hover:bg-red-500/40">
+                        <button onClick={(e) => handleDeletePlan(plan.id, e)} className="p-2 bg-red-500/20 text-red-100 rounded-lg hover:bg-red-500/40 transition">
                           <X size={16} />
                         </button>
-                        <button onClick={(e) => handleCompletePlan(plan, e)} className="px-3 py-1.5 bg-white text-blue-600 text-xs font-bold rounded-lg flex items-center gap-1 active:scale-95">
+                        <button onClick={(e) => handleCompletePlan(plan, e)} className="px-3 py-1.5 bg-white text-blue-600 text-xs font-bold rounded-lg flex items-center gap-1 active:scale-95 transition">
                           <Check size={14} /> Gidildi
                         </button>
                       </div>
@@ -462,7 +508,7 @@ export default function DenetimTakipApp({ onBack }) {
               ))}
             </div>
 
-            {/* BİRİM KARTLARI (TAŞMA DÜZELTİLDİ) */}
+            {/* BİRİM KARTLARI */}
             <div className="grid gap-3">
               {unitStats.map(unit => {
                 const latestNote = unit.notesList && unit.notesList.length > 0 ? unit.notesList[0].text : unit.notes;
@@ -476,7 +522,7 @@ export default function DenetimTakipApp({ onBack }) {
                   <div className={`absolute top-0 left-0 w-1 h-full ${getStatusIndicatorColor(unit.days)}`}></div>
                   
                   <div className="flex justify-between items-start pl-2 gap-2">
-                    {/* SOL TARAF: Uzun metinler kesilecek (truncate) */}
+                    {/* SOL TARAF */}
                     <div className="min-w-0 flex-1"> 
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide truncate">
                         {unit.city} {unit.district ? `• ${unit.district}` : ''}
@@ -492,7 +538,7 @@ export default function DenetimTakipApp({ onBack }) {
                       </div>
                     </div>
                     
-                    {/* SAĞ TARAF: Butonlar alanı (Sabit genişlikte ve alt alta) */}
+                    {/* SAĞ TARAF: Butonlar */}
                     <div className="flex flex-col items-end gap-1.5 shrink-0">
                       <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusColor(unit.days)} text-center`}>
                         {getStatusLabel(unit.days)}
@@ -544,7 +590,6 @@ export default function DenetimTakipApp({ onBack }) {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Planları tarihe göre grupla */}
                 {Object.entries(
                   plans.reduce((acc, plan) => {
                     (acc[plan.date] = acc[plan.date] || []).push(plan);
@@ -565,7 +610,7 @@ export default function DenetimTakipApp({ onBack }) {
                               <p className="font-bold text-sm text-gray-800">{u?.name || 'Bilinmeyen'}</p>
                               <p className="text-xs text-gray-500">{u?.district} / {u?.city}</p>
                             </div>
-                            <button onClick={() => handleDeletePlan(plan.id)} className="text-red-400 p-2 bg-red-50 rounded-lg">
+                            <button onClick={() => handleDeletePlan(plan.id)} className="text-red-400 p-2 bg-red-50 hover:bg-red-100 rounded-lg transition">
                               <Trash2 size={16} />
                             </button>
                           </div>
@@ -612,7 +657,7 @@ export default function DenetimTakipApp({ onBack }) {
                   </div>
                 </div>
 
-                {/* PLANLAMA ALANI YENİ */}
+                {/* PLANLAMA ALANI */}
                 <div className="mb-6 p-4 bg-purple-50 rounded-xl border border-purple-100">
                   <label className="text-xs font-bold text-purple-800 flex items-center gap-1 mb-2">
                     <CalendarPlus size={14}/> Bu Şubeye Plan Yap
@@ -653,22 +698,31 @@ export default function DenetimTakipApp({ onBack }) {
                   </button>
                 </div>
 
-                {/* GEÇMİŞ NOTLAR */}
+                {/* GEÇMİŞ NOTLAR (SİLME ÖZELLİĞİ EKLENDİ) */}
                 {unitNotes.length > 0 && (
                   <div className="space-y-2 mt-4">
                     <label className="text-[10px] font-bold text-gray-400 uppercase">Geçmiş Notlar</label>
                     <div className="max-h-[200px] overflow-y-auto pr-1 space-y-2">
                       {unitNotes.map(n => (
-                        <div key={n.id} className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
-                          <p className="text-[10px] font-bold text-yellow-600 mb-1">{new Date(n.date).toLocaleDateString('tr-TR', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'})}</p>
-                          <p className="text-sm text-gray-700 italic">{n.text}</p>
+                        <div key={n.id} className="bg-yellow-50 p-3 rounded-lg border border-yellow-100 flex justify-between items-start gap-2">
+                          <div className="flex-1">
+                            <p className="text-[10px] font-bold text-yellow-600 mb-1">{new Date(n.date).toLocaleDateString('tr-TR', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'})}</p>
+                            <p className="text-sm text-gray-700 italic break-words">{n.text}</p>
+                          </div>
+                          <button 
+                            onClick={() => handleDeleteNote(n.id)}
+                            className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition shrink-0"
+                            title="Notu Sil"
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
                 
-                {/* ESKİ TEK TİP NOT VARSA GÖSTER (Geriye dönük uyumluluk) */}
+                {/* ESKİ TEK TİP NOT VARSA GÖSTER */}
                 {selectedUnitForDetail.notes && unitNotes.length === 0 && (
                   <div className="mt-2 bg-yellow-50 p-3 rounded-lg border border-yellow-100">
                     <p className="text-[10px] font-bold text-yellow-600 mb-1">Eski Not</p>
@@ -749,7 +803,6 @@ export default function DenetimTakipApp({ onBack }) {
                     <h3 className="text-2xl md:text-3xl font-black text-white mb-1 leading-tight">{wheelResult.name}</h3>
                     <p className="text-gray-400 text-xs mb-3">{wheelResult.city} / {wheelResult.district}</p>
                     
-                    {/* YENİ: Çark üzerinden bugüne planlama */}
                     <div className="flex gap-2 justify-center mt-2">
                       <button 
                         onClick={() => handleAddPlan(wheelResult.id, getLocalYYYYMMDD())}

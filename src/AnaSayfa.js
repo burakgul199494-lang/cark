@@ -9,7 +9,7 @@ export default function AnaSayfa() {
       {/* Sevkiyat Planla */}
       <Link to="/sevkiyat" className="no-underline group">
         <MenuCard 
-          title="Sevkiyat Planla" 
+          title="Sevkiyat Planlaa" 
           desc="Stok ve ciro bazlı hesaplama." 
           icon={<Truck size={48} className="text-blue-600 group-hover:scale-110 transition-transform"/>} 
           color="border-blue-500" 

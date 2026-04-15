@@ -382,10 +382,10 @@ export default function DenetimTakipApp({ onBack }) {
         return;
       }
 
-      const existingAudit = audits.find(a => a.date === newAudit.date);
+      // Aynı şubeye aynı tarihte gidilmiş mi kontrolü
+      const existingAudit = audits.find(a => a.date === newAudit.date && a.unitId === newAudit.unitId);
       if (existingAudit) {
-        const foundUnit = units.find(x => x.id === existingAudit.unitId);
-        setErrorMsg(`${formatDateDisplay(newAudit.date)} tarihinde zaten ${foundUnit ? foundUnit.name : 'başka bir'} şubesine gidilmiş! Günde 1 kayıt girilebilir.`);
+        setErrorMsg(`${formatDateDisplay(newAudit.date)} tarihinde bu şubeye zaten denetim girilmiş!`);
         return;
       }
       const existingPlan = plans.find(p => p.unitId === newAudit.unitId && p.date === newAudit.date);
@@ -403,10 +403,10 @@ export default function DenetimTakipApp({ onBack }) {
         return;
       }
 
-      const existingAudit = audits.find(a => a.date === today);
+      // Aynı şubeye aynı tarihte gidilmiş mi kontrolü
+      const existingAudit = audits.find(a => a.date === today && a.unitId === unitId);
       if (existingAudit) {
-        const foundUnit = units.find(x => x.id === existingAudit.unitId);
-        setErrorMsg(`Bugün zaten ${foundUnit ? foundUnit.name : 'başka bir'} şubesine gidilmiş! Günde 1 kayıt girilebilir.`);
+        setErrorMsg(`Bugün bu şubeye zaten gidilmiş!`);
         return;
       }
       const existingPlan = plans.find(p => p.unitId === unitId && p.date === today);
@@ -480,17 +480,17 @@ export default function DenetimTakipApp({ onBack }) {
       return false;
     }
 
-    const existingAudit = audits.find(a => a.date === date);
+    // Aynı şubeye aynı tarihte gidilmiş mi kontrolü
+    const existingAudit = audits.find(a => a.date === date && a.unitId === unitId);
     if (existingAudit) {
-        const foundUnit = units.find(x => x.id === existingAudit.unitId);
-        setErrorMsg(`${formatDateDisplay(date)} tarihinde zaten ${foundUnit ? foundUnit.name : 'başka bir'} şubesine gidilmiş!`);
+        setErrorMsg(`${formatDateDisplay(date)} tarihinde bu şubeye zaten gidilmiş!`);
         return false;
     }
 
-    const existingPlan = plans.find(p => p.date === date);
+    // Aynı şubeye aynı tarihte plan var mı kontrolü
+    const existingPlan = plans.find(p => p.date === date && p.unitId === unitId);
     if (existingPlan) {
-        const foundUnit = units.find(x => x.id === existingPlan.unitId);
-        setErrorMsg(`Bu tarih için zaten ${foundUnit ? foundUnit.name : 'başka bir'} şubeye planınız var!`);
+        setErrorMsg(`Bu tarih için bu şubeye zaten planınız var!`);
         return false;
     }
 
@@ -506,11 +506,11 @@ export default function DenetimTakipApp({ onBack }) {
 
   const handleCompletePlan = (plan, e) => {
     e?.stopPropagation();
-    const existingAudit = audits.find(a => a.date === plan.date);
     
+    // Aynı şubeye aynı tarihte gidilmiş mi kontrolü
+    const existingAudit = audits.find(a => a.date === plan.date && a.unitId === plan.unitId);
     if (existingAudit) {
-      const u = units.find(x => x.id === existingAudit.unitId);
-      setErrorMsg(`Bu tarihte zaten ${u ? u.name : 'başka bir'} şubesine gidilmiş! Çakışan plan siliniyor...`);
+      setErrorMsg(`Bu tarihte bu şubeye zaten gidilmiş! Çakışan plan siliniyor...`);
       deleteDoc(doc(db, 'bireysel_planlar', plan.id)).catch(()=>{});
       return;
     }
@@ -1188,10 +1188,10 @@ export default function DenetimTakipApp({ onBack }) {
                         />
                         <button 
                           onClick={() => {
-                            const existingAudit = audits.find(a => a.date === detailAuditDate);
+                            // Aynı şubeye aynı tarihte gidilmiş mi kontrolü
+                            const existingAudit = audits.find(a => a.date === detailAuditDate && a.unitId === selectedUnitForDetail.id);
                             if (existingAudit) {
-                              const foundUnit = units.find(x => x.id === existingAudit.unitId);
-                              setErrorMsg(`${formatDateDisplay(detailAuditDate)} tarihinde zaten ${foundUnit ? foundUnit.name : 'başka bir'} şubesine gidilmiş!`);
+                              setErrorMsg(`${formatDateDisplay(detailAuditDate)} tarihinde bu şubeye zaten gidilmiş!`);
                               return;
                             }
                             const existingPlan = plans.find(p => p.unitId === selectedUnitForDetail.id && p.date === detailAuditDate);

@@ -366,7 +366,7 @@ export default function DenetimTakipApp({ onBack }) {
   const handleToggleUnitStatus = async (unitId, currentStatus) => {
     try {
       await updateDoc(doc(db, 'bireysel_birimler', unitId), {
-        isActive: currentStatus === false ? true : false // Eğer false ise true yap, true/undefined ise false yap
+        isActive: currentStatus === false ? true : false
       });
       showSuccess(`Birim durumu güncellendi.`);
     } catch (error) {
@@ -562,21 +562,19 @@ export default function DenetimTakipApp({ onBack }) {
     }
   };
 
-  // EXCEL ÇIKTISI ALMA
+  // EXCEL ÇIKTISI ALMA (Kayıtlar)
   const handleExportExcel = () => {
     if (audits.length === 0) {
       setErrorMsg("Dışa aktarılacak kayıt bulunmuyor.");
       return;
     }
-    // UTF-8 BOM ekliyoruz ki Excel Türkçe karakterleri düzgün tanısın
-    let csvContent = "\uFEFF";
+    let csvContent = "\uFEFF"; // UTF-8 BOM
     csvContent += "İl,İlçe,Birim Adı,Ziyaret Tarihi,Not\n";
 
     const sortedAudits = [...audits].sort((a,b) => new Date(b.date) - new Date(a.date));
 
     sortedAudits.forEach(audit => {
       const unit = units.find(u => u.id === audit.unitId) || { city: 'Bilinmiyor/Silinmiş', district: '-', name: 'Silinmiş Birim' };
-      // Not içerisinde olası virgül ve tırnakları Excel formatına uygun hale getirelim
       const safeNote = audit.note ? `"${audit.note.replace(/"/g, '""')}"` : "";
       const dateStr = formatDateDisplay(audit.date);
       csvContent += `"${unit.city}","${unit.district}","${unit.name}","${dateStr}",${safeNote}\n`;
@@ -587,6 +585,60 @@ export default function DenetimTakipApp({ onBack }) {
     const link = document.createElement("a");
     link.setAttribute("href", url);
     link.setAttribute("download", `Ziyaret_Kayitlari_${getLocalYYYYMMDD()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // EXCEL ÇIKTISI ALMA (Planlar)
+  const handleExportPlansExcel = () => {
+    if (plans.length === 0) {
+      setErrorMsg("Dışa aktarılacak plan bulunmuyor.");
+      return;
+    }
+    
+    // Tarihlere göre planları grupla
+    const plansByDate = {};
+    plans.forEach(plan => {
+      const u = units.find(x => x.id === plan.unitId);
+      const unitName = u ? u.name : 'Bilinmeyen Şube';
+      if (!plansByDate[plan.date]) {
+        plansByDate[plan.date] = [];
+      }
+      plansByDate[plan.date].push(unitName);
+    });
+
+    // Tarihleri eskiden yeniye sırala (soldan sağa kolonlar olacak)
+    const sortedDates = Object.keys(plansByDate).sort((a, b) => new Date(a) - new Date(b));
+    
+    // En fazla plan olan günün sayısını bul (satır sayısını belirlemek için)
+    let maxRows = 0;
+    sortedDates.forEach(d => {
+      if (plansByDate[d].length > maxRows) {
+        maxRows = plansByDate[d].length;
+      }
+    });
+
+    let csvContent = "\uFEFF"; // UTF-8 BOM
+
+    // Başlıklar: Tarihler
+    const dateHeaders = sortedDates.map(d => `"${formatDateDisplay(d)}"`).join(',');
+    csvContent += dateHeaders + "\n";
+    
+    // Satırlar: O tarihteki şubeler
+    for (let i = 0; i < maxRows; i++) {
+      const row = sortedDates.map(d => {
+        const unitName = plansByDate[d][i];
+        return unitName ? `"${unitName}"` : '""';
+      }).join(',');
+      csvContent += row + "\n";
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Haftalik_Planlar_${getLocalYYYYMMDD()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -641,14 +693,6 @@ export default function DenetimTakipApp({ onBack }) {
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [audits, units, recordsDateFilter]);
 
-  const todaysPlans = useMemo(() => {
-    const todayStr = getLocalYYYYMMDD();
-    return plans.filter(p => p.date === todayStr).map(p => {
-      const u = units.find(u => u.id === p.unitId);
-      return { ...p, unitName: u ? u.name : 'Bilinmeyen Şube', district: u ? u.district : '' };
-    });
-  }, [plans, units]);
-
   const allNotesData = useMemo(() => {
     let all = [];
     units.forEach(u => {
@@ -658,8 +702,17 @@ export default function DenetimTakipApp({ onBack }) {
         });
       }
     });
-    return all.sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Notları tam zaman damgasına göre EN YENİ EN ÜSTTE olacak şekilde kesin sıralama
+    return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [units]);
+
+  const todaysPlans = useMemo(() => {
+    const todayStr = getLocalYYYYMMDD();
+    return plans.filter(p => p.date === todayStr).map(p => {
+      const u = units.find(u => u.id === p.unitId);
+      return { ...p, unitName: u ? u.name : 'Bilinmeyen Şube', district: u ? u.district : '' };
+    });
+  }, [plans, units]);
 
   const filterOptions = [
     { label: 'Tümü', value: 'all', color: 'bg-gray-400' },
@@ -1071,6 +1124,21 @@ export default function DenetimTakipApp({ onBack }) {
         {/* HAFTALIK SHIFT / TÜM PLANLAR EKRANI */}
         {activeTab === 'weeklyPlans' && (
           <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+            
+            {/* PLANLAR EXCEL ÇIKTISI BUTONU VE BAŞLIK */}
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <CalendarDays size={18} className="text-purple-600" />
+                <span className="font-bold text-gray-800 text-sm">Tüm Planlar</span>
+              </div>
+              <button 
+                onClick={handleExportPlansExcel}
+                className="flex items-center gap-1.5 text-xs font-bold bg-green-50 text-green-700 px-3 py-1.5 rounded-lg border border-green-200 hover:bg-green-100 transition active:scale-95"
+              >
+                <Download size={14}/> Excel'e Aktar
+              </button>
+            </div>
+
             {plans.length === 0 ? (
               <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">
                 Henüz yapılmış bir planınız bulunmuyor.
@@ -1114,7 +1182,8 @@ export default function DenetimTakipApp({ onBack }) {
         {/* ŞUBE DETAY EKRANI */}
         {activeTab === 'unitDetail' && selectedUnitForDetail && (() => {
           const uAudits = audits.filter(a => a.unitId === selectedUnitForDetail.id).sort((a,b) => new Date(b.date) - new Date(a.date));
-          const unitNotes = selectedUnitForDetail.notesList || []; 
+          // Şube içindeki notları da tam zaman damgasına göre yeniden eskiye sıralama garantisi
+          const unitNotes = [...(selectedUnitForDetail.notesList || [])].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
           const isInactive = selectedUnitForDetail.isActive === false;
           
           return (

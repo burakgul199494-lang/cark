@@ -122,14 +122,12 @@ export default function DenetimTakipApp({ onBack }) {
   // FİLTRELEME DURUMLARI
   const [urgencyFilter, setUrgencyFilter] = useState('all'); 
   const [selectedCityFilter, setSelectedCityFilter] = useState('all'); 
-  const [recordsDateFilter, setRecordsDateFilter] = useState(''); // Kayıtlar ekranı tarih filtresi
+  const [recordsDateFilter, setRecordsDateFilter] = useState(''); 
 
-  // DETAY VE NOT DURUMLARI
+  // DETAY DURUMLARI
   const [selectedUnitForDetail, setSelectedUnitForDetail] = useState(null);
-  const [unitNote, setUnitNote] = useState('');
   const [planDate, setPlanDate] = useState(getLocalYYYYMMDD()); 
   const [detailAuditDate, setDetailAuditDate] = useState(getLocalYYYYMMDD());
-  const [isSavingNote, setIsSavingNote] = useState(false);
 
   // ÇARK / KURA DURUMLARI
   const [wheelCityFilter, setWheelCityFilter] = useState('all');
@@ -208,7 +206,7 @@ export default function DenetimTakipApp({ onBack }) {
           ];
 
           for (const u of defaultUnits) {
-            await addDoc(collection(db, 'bireysel_birimler'), { ...u, userId: uid, notes: '', notesList: [], isActive: true });
+            await addDoc(collection(db, 'bireysel_birimler'), { ...u, userId: uid, isActive: true });
           }
 
           await setDoc(flagRef, { baslangicBirimleriEklendi: true }, { merge: true });
@@ -266,7 +264,7 @@ export default function DenetimTakipApp({ onBack }) {
   };
 
   const getStatusColor = (days, isActive) => {
-    if (isActive === false) return 'bg-gray-100 text-gray-500 border-gray-300'; // Kapalı şube
+    if (isActive === false) return 'bg-gray-100 text-gray-500 border-gray-300';
     if (days === Infinity) return 'bg-gray-100 text-gray-500 border-gray-200';
     if (days <= 15) return 'bg-green-50 text-green-700 border-green-200';
     if (days >= 16 && days <= 30) return 'bg-yellow-50 text-yellow-700 border-yellow-200';
@@ -299,19 +297,6 @@ export default function DenetimTakipApp({ onBack }) {
   const uniqueCitiesList = useMemo(() => Object.keys(TURKEY_DATA).sort((a,b) => a.localeCompare(b, 'tr')), []);
 
   // --- ZİYARET EKLEME & NOT MODALI İŞLEMLERİ ---
-  const appendNoteToUnit = async (unitId, noteText) => {
-    const unit = units.find(u => u.id === unitId);
-    if (!unit) return;
-    const newNoteObj = {
-      id: Date.now().toString(),
-      date: new Date().toISOString(),
-      text: noteText.trim()
-    };
-    const currentNotes = unit.notesList || [];
-    const updatedNotes = [newNoteObj, ...currentNotes];
-    await updateDoc(doc(db, 'bireysel_birimler', unitId), { notesList: updatedNotes });
-  };
-
   const executeAuditSave = async (withNote) => {
     if (!pendingAudit) return;
     const { unitId, date, planId } = pendingAudit;
@@ -319,11 +304,6 @@ export default function DenetimTakipApp({ onBack }) {
     const noteText = (withNote && pendingAuditNote.trim()) ? pendingAuditNote.trim() : "";
     
     try {
-        if (noteText) {
-            await appendNoteToUnit(unitId, noteText);
-        }
-        
-        // Denetim kaydına notu da ekleyelim (Excel ve Kayıtlar ekranı için)
         await addDoc(collection(db, 'bireysel_denetimler'), { 
           unitId, 
           date, 
@@ -355,7 +335,7 @@ export default function DenetimTakipApp({ onBack }) {
       try {
         await addDoc(collection(db, 'bireysel_birimler'), {
           city: newUnit.city.trim(), district: newUnit.district.trim(), name: newUnit.name.trim(),
-          notes: '', notesList: [], userId: uid, isActive: true
+          userId: uid, isActive: true
         });
         setNewUnit({ city: '', district: '', name: '' });
         showSuccess('Birim başarıyla eklendi.');
@@ -382,7 +362,6 @@ export default function DenetimTakipApp({ onBack }) {
         return;
       }
 
-      // Aynı şubeye aynı tarihte gidilmiş mi kontrolü
       const existingAudit = audits.find(a => a.date === newAudit.date && a.unitId === newAudit.unitId);
       if (existingAudit) {
         setErrorMsg(`${formatDateDisplay(newAudit.date)} tarihinde bu şubeye zaten denetim girilmiş!`);
@@ -403,7 +382,6 @@ export default function DenetimTakipApp({ onBack }) {
         return;
       }
 
-      // Aynı şubeye aynı tarihte gidilmiş mi kontrolü
       const existingAudit = audits.find(a => a.date === today && a.unitId === unitId);
       if (existingAudit) {
         setErrorMsg(`Bugün bu şubeye zaten gidilmiş!`);
@@ -480,14 +458,12 @@ export default function DenetimTakipApp({ onBack }) {
       return false;
     }
 
-    // Aynı şubeye aynı tarihte gidilmiş mi kontrolü
     const existingAudit = audits.find(a => a.date === date && a.unitId === unitId);
     if (existingAudit) {
         setErrorMsg(`${formatDateDisplay(date)} tarihinde bu şubeye zaten gidilmiş!`);
         return false;
     }
 
-    // Aynı şubeye aynı tarihte plan var mı kontrolü
     const existingPlan = plans.find(p => p.date === date && p.unitId === unitId);
     if (existingPlan) {
         setErrorMsg(`Bu tarih için bu şubeye zaten planınız var!`);
@@ -507,7 +483,6 @@ export default function DenetimTakipApp({ onBack }) {
   const handleCompletePlan = (plan, e) => {
     e?.stopPropagation();
     
-    // Aynı şubeye aynı tarihte gidilmiş mi kontrolü
     const existingAudit = audits.find(a => a.date === plan.date && a.unitId === plan.unitId);
     if (existingAudit) {
       setErrorMsg(`Bu tarihte bu şubeye zaten gidilmiş! Çakışan plan siliniyor...`);
@@ -523,52 +498,13 @@ export default function DenetimTakipApp({ onBack }) {
     try { await deleteDoc(doc(db, 'bireysel_planlar', planId)); } catch (err) {}
   };
 
-  const handleSaveNote = async () => {
-    if(!selectedUnitForDetail || !unitNote.trim()) return;
-    setIsSavingNote(true);
-    try {
-      await appendNoteToUnit(selectedUnitForDetail.id, unitNote);
-      const newNoteObj = { id: Date.now().toString(), date: new Date().toISOString(), text: unitNote.trim() };
-      const currentNotes = selectedUnitForDetail.notesList || [];
-      setSelectedUnitForDetail({...selectedUnitForDetail, notesList: [newNoteObj, ...currentNotes]});
-      
-      setUnitNote('');
-      showSuccess('Not başarıyla eklendi.');
-    } catch(err) {
-      setErrorMsg("Not kaydedilemedi.");
-    }
-    setIsSavingNote(false);
-  };
-
-  const handleDeleteNote = async (noteId, targetUnitId) => {
-    if(!window.confirm('Bu notu silmek istediğinize emin misiniz?')) return;
-    try {
-      const targetUnit = units.find(u => u.id === targetUnitId);
-      if (!targetUnit) return;
-
-      const currentNotes = targetUnit.notesList || [];
-      const updatedNotes = currentNotes.filter(n => n.id !== noteId);
-
-      await updateDoc(doc(db, 'bireysel_birimler', targetUnitId), {
-        notesList: updatedNotes
-      });
-
-      if (selectedUnitForDetail && selectedUnitForDetail.id === targetUnitId) {
-        setSelectedUnitForDetail({...selectedUnitForDetail, notesList: updatedNotes});
-      }
-      showSuccess('Not başarıyla silindi.');
-    } catch(err) {
-      setErrorMsg("Not silinirken hata oluştu.");
-    }
-  };
-
   // EXCEL ÇIKTISI ALMA (Kayıtlar)
   const handleExportExcel = () => {
     if (audits.length === 0) {
       setErrorMsg("Dışa aktarılacak kayıt bulunmuyor.");
       return;
     }
-    let csvContent = "\uFEFF"; // UTF-8 BOM
+    let csvContent = "\uFEFF"; 
     csvContent += "İl,İlçe,Birim Adı,Ziyaret Tarihi,Not\n";
 
     const sortedAudits = [...audits].sort((a,b) => new Date(b.date) - new Date(a.date));
@@ -597,7 +533,6 @@ export default function DenetimTakipApp({ onBack }) {
       return;
     }
     
-    // Tarihlere göre planları grupla
     const plansByDate = {};
     plans.forEach(plan => {
       const u = units.find(x => x.id === plan.unitId);
@@ -608,10 +543,8 @@ export default function DenetimTakipApp({ onBack }) {
       plansByDate[plan.date].push(unitName);
     });
 
-    // Tarihleri eskiden yeniye sırala (soldan sağa kolonlar olacak)
     const sortedDates = Object.keys(plansByDate).sort((a, b) => new Date(a) - new Date(b));
     
-    // En fazla plan olan günün sayısını bul (satır sayısını belirlemek için)
     let maxRows = 0;
     sortedDates.forEach(d => {
       if (plansByDate[d].length > maxRows) {
@@ -619,13 +552,11 @@ export default function DenetimTakipApp({ onBack }) {
       }
     });
 
-    let csvContent = "\uFEFF"; // UTF-8 BOM
+    let csvContent = "\uFEFF"; 
 
-    // Başlıklar: Tarihler
     const dateHeaders = sortedDates.map(d => `"${formatDateDisplay(d)}"`).join(',');
     csvContent += dateHeaders + "\n";
     
-    // Satırlar: O tarihteki şubeler
     for (let i = 0; i < maxRows; i++) {
       const row = sortedDates.map(d => {
         const unitName = plansByDate[d][i];
@@ -651,12 +582,14 @@ export default function DenetimTakipApp({ onBack }) {
       .map(unit => {
         const unitAudits = audits.filter(a => a.unitId === unit.id);
         const unitPlans = plans.filter(p => p.unitId === unit.id && p.date >= getLocalYYYYMMDD()).sort((a,b) => new Date(a.date) - new Date(b.date));
-        const lastAudit = unitAudits.length > 0 ? unitAudits.sort((a, b) => new Date(b.date) - new Date(a.date))[0].date : null;
+        const lastAuditObj = unitAudits.length > 0 ? unitAudits.sort((a, b) => new Date(b.date) - new Date(a.date))[0] : null;
+        
         return { 
           ...unit, 
-          lastAudit, 
+          lastAudit: lastAuditObj ? lastAuditObj.date : null,
+          latestNote: lastAuditObj ? lastAuditObj.note : unit.notes, // Ana ekran görünümü için en son ziyaret notu
           totalVisits: unitAudits.length, 
-          days: getDaysPassed(lastAudit),
+          days: getDaysPassed(lastAuditObj ? lastAuditObj.date : null),
           nextPlan: unitPlans.length > 0 ? unitPlans[0] : null
         };
       })
@@ -693,19 +626,6 @@ export default function DenetimTakipApp({ onBack }) {
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [audits, units, recordsDateFilter]);
 
-  const allNotesData = useMemo(() => {
-    let all = [];
-    units.forEach(u => {
-      if (u.notesList && u.notesList.length > 0) {
-        u.notesList.forEach(n => {
-          all.push({ ...n, unitName: u.name, unitCity: u.city, unitId: u.id });
-        });
-      }
-    });
-    // Notları tam zaman damgasına göre EN YENİ EN ÜSTTE olacak şekilde kesin sıralama
-    return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [units]);
-
   const todaysPlans = useMemo(() => {
     const todayStr = getLocalYYYYMMDD();
     return plans.filter(p => p.date === todayStr).map(p => {
@@ -730,7 +650,7 @@ export default function DenetimTakipApp({ onBack }) {
       const lastAudit = unitAudits.length > 0 ? unitAudits.sort((a, b) => new Date(b.date) - new Date(a.date))[0].date : null;
       return { ...unit, days: getDaysPassed(lastAudit) };
     }).filter(u => wheelCityFilter === 'all' || u.city === wheelCityFilter)
-      .filter(u => u.isActive !== false) // Kapalıları kuradan çıkar
+      .filter(u => u.isActive !== false)
       .filter(u => {
         if (wheelUrgencyFilter === 'all') return true;
         if (wheelUrgencyFilter === '0-15') return u.days <= 15;
@@ -767,7 +687,6 @@ export default function DenetimTakipApp({ onBack }) {
 
   const openUnitDetail = (unit) => {
     setSelectedUnitForDetail(unit);
-    setUnitNote('');
     setPlanDate(getLocalYYYYMMDD());
     setDetailAuditDate(getLocalYYYYMMDD());
     setActiveTab('unitDetail');
@@ -897,13 +816,12 @@ export default function DenetimTakipApp({ onBack }) {
         <h1 className="text-lg font-bold flex items-center gap-2 text-gray-800">
           {activeTab === 'unitDetail' ? <><MapPin className="text-blue-600" size={22} /> Şube Detayı</> : 
            activeTab === 'weeklyPlans' ? <><CalendarDays className="text-purple-600" size={22} /> Planlar</> : 
-           activeTab === 'allNotes' ? <><FileText className="text-yellow-500" size={22} /> Notlar</> : 
            activeTab === 'addAudit' ? <><History className="text-blue-600" size={22} /> Kayıtlar</> : 
            activeTab === 'wheel' ? <><Dna className="text-purple-600" size={22} /> Kura</> : 
            activeTab === 'units' ? <><Settings className="text-gray-600" size={22} /> Yönetim</> : 
            <><CheckCircle2 className="text-blue-600" size={22} /> Denetim Takip</>}
         </h1>
-        <div className="w-[40px]"></div> {/* Boşluk hizalaması için */}
+        <div className="w-[40px]"></div>
       </div>
 
       {/* UYARI VE BAŞARI MESAJLARI */}
@@ -999,7 +917,6 @@ export default function DenetimTakipApp({ onBack }) {
             {/* BİRİM KARTLARI */}
             <div className="grid gap-3">
               {unitStats.map(unit => {
-                const latestNote = unit.notesList && unit.notesList.length > 0 ? unit.notesList[0].text : unit.notes;
                 const isInactive = unit.isActive === false;
 
                 return (
@@ -1067,10 +984,10 @@ export default function DenetimTakipApp({ onBack }) {
                   )}
                   
                   {/* NOT GÖSTERİMİ */}
-                  {latestNote && (
+                  {unit.latestNote && (
                     <div className="pl-2 mt-1 flex items-start gap-1.5 text-[11px] text-gray-500 bg-gray-50 p-2 rounded-lg border border-gray-100">
                       <FileText size={12} className="mt-0.5 shrink-0 text-gray-400" />
-                      <p className="line-clamp-2 italic">{latestNote}</p>
+                      <p className="line-clamp-2 italic">{unit.latestNote}</p>
                     </div>
                   )}
                 </div>
@@ -1081,43 +998,6 @@ export default function DenetimTakipApp({ onBack }) {
                 </div>
               )}
             </div>
-          </div>
-        )}
-
-        {/* TÜM NOTLAR EKRANI */}
-        {activeTab === 'allNotes' && (
-          <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
-            {allNotesData.length === 0 ? (
-               <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">
-                 Sistemde henüz hiçbir not bulunmuyor.
-               </div>
-            ) : (
-               <div className="space-y-3">
-                 {allNotesData.map(note => (
-                   <div key={note.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-2">
-                     <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm font-bold text-gray-800">{note.unitName}</p>
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{note.unitCity}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                           <span className="text-[10px] font-bold text-yellow-700 bg-yellow-50 border border-yellow-100 px-2 py-1 rounded-lg shrink-0">
-                             {new Date(note.date).toLocaleDateString('tr-TR', {day:'numeric', month:'short', year:'numeric'})}
-                           </span>
-                           <button 
-                             onClick={() => handleDeleteNote(note.id, note.unitId)}
-                             className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition shrink-0"
-                             title="Notu Sil"
-                           >
-                             <Trash2 size={16} />
-                           </button>
-                        </div>
-                     </div>
-                     <p className="text-sm text-gray-700 italic bg-gray-50 p-3 rounded-xl border border-gray-100">"{note.text}"</p>
-                   </div>
-                 ))}
-               </div>
-            )}
           </div>
         )}
 
@@ -1182,8 +1062,6 @@ export default function DenetimTakipApp({ onBack }) {
         {/* ŞUBE DETAY EKRANI */}
         {activeTab === 'unitDetail' && selectedUnitForDetail && (() => {
           const uAudits = audits.filter(a => a.unitId === selectedUnitForDetail.id).sort((a,b) => new Date(b.date) - new Date(a.date));
-          // Şube içindeki notları da tam zaman damgasına göre yeniden eskiye sıralama garantisi
-          const unitNotes = [...(selectedUnitForDetail.notesList || [])].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
           const isInactive = selectedUnitForDetail.isActive === false;
           
           return (
@@ -1257,7 +1135,6 @@ export default function DenetimTakipApp({ onBack }) {
                         />
                         <button 
                           onClick={() => {
-                            // Aynı şubeye aynı tarihte gidilmiş mi kontrolü
                             const existingAudit = audits.find(a => a.date === detailAuditDate && a.unitId === selectedUnitForDetail.id);
                             if (existingAudit) {
                               setErrorMsg(`${formatDateDisplay(detailAuditDate)} tarihinde bu şubeye zaten gidilmiş!`);
@@ -1274,58 +1151,6 @@ export default function DenetimTakipApp({ onBack }) {
                     </div>
                   </>
                 )}
-
-                {/* NOT EKLEME ALANI */}
-                <div className="space-y-2 mb-4 border-t border-gray-100 pt-4">
-                  <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                    <Plus size={14}/> Yeni Not Ekle
-                  </label>
-                  <textarea 
-                    value={unitNote}
-                    onChange={(e) => setUnitNote(e.target.value)}
-                    placeholder="Ziyaretinizle ilgili not yazın..."
-                    className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
-                  />
-                  <button 
-                    onClick={handleSaveNote}
-                    disabled={isSavingNote || !unitNote.trim()}
-                    className="w-full py-2.5 bg-gray-800 text-white rounded-xl text-sm font-bold shadow-sm active:bg-gray-900 transition-colors disabled:opacity-50"
-                  >
-                    {isSavingNote ? 'Kaydediliyor...' : 'Notu Ekle'}
-                  </button>
-                </div>
-
-                {/* GEÇMİŞ NOTLAR */}
-                {unitNotes.length > 0 && (
-                  <div className="space-y-2 mt-4">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase">Geçmiş Notlar</label>
-                    <div className="max-h-[200px] overflow-y-auto pr-1 space-y-2">
-                      {unitNotes.map(n => (
-                        <div key={n.id} className="bg-yellow-50 p-3 rounded-lg border border-yellow-100 flex justify-between items-start gap-2">
-                          <div className="flex-1">
-                            <p className="text-[10px] font-bold text-yellow-600 mb-1">{new Date(n.date).toLocaleDateString('tr-TR', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'})}</p>
-                            <p className="text-sm text-gray-700 italic break-words">{n.text}</p>
-                          </div>
-                          <button 
-                            onClick={() => handleDeleteNote(n.id, selectedUnitForDetail.id)}
-                            className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition shrink-0"
-                            title="Notu Sil"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* ESKİ TEK TİP NOT VARSA GÖSTER */}
-                {selectedUnitForDetail.notes && unitNotes.length === 0 && (
-                  <div className="mt-2 bg-yellow-50 p-3 rounded-lg border border-yellow-100">
-                    <p className="text-[10px] font-bold text-yellow-600 mb-1">Eski Not</p>
-                    <p className="text-sm text-gray-700 italic">{selectedUnitForDetail.notes}</p>
-                  </div>
-                )}
               </div>
 
               {/* ZİYARET GEÇMİŞİ */}
@@ -1333,11 +1158,20 @@ export default function DenetimTakipApp({ onBack }) {
                 <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
                   <History size={16} className="text-blue-500" /> Ziyaret Geçmişi
                 </h3>
-                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2">
                   {uAudits.map((a, i) => (
-                    <div key={a.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-100">
-                      <span className="text-sm font-bold text-gray-700">{formatDateDisplay(a.date)}</span>
-                      {i === 0 && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">SON ZİYARET</span>}
+                    <div key={a.id} className="flex flex-col p-3 bg-gray-50 rounded-xl border border-gray-100">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-bold text-gray-700">{formatDateDisplay(a.date)}</span>
+                        {i === 0 && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">SON ZİYARET</span>}
+                      </div>
+                      {/* O ziyarete ait notu göster */}
+                      {a.note && (
+                        <div className="mt-2 text-xs text-gray-600 bg-white p-2 rounded-lg border border-gray-100 italic">
+                          <FileText size={12} className="inline mr-1 text-gray-400" />
+                          {a.note}
+                        </div>
+                      )}
                     </div>
                   ))}
                   {uAudits.length === 0 && <p className="text-sm text-gray-400 italic py-2 text-center">Henüz ziyaret kaydı yok.</p>}
@@ -1657,7 +1491,7 @@ export default function DenetimTakipApp({ onBack }) {
 
       </div>
 
-      {/* MOBİL ALT NAVİGASYON BARI (6 BUTON) */}
+      {/* MOBİL ALT NAVİGASYON BARI (5 BUTON) */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-between items-center pb-safe z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.02)] h-[70px] px-1 md:px-4">
         
         <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${['dashboard', 'unitDetail'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}>
@@ -1668,11 +1502,6 @@ export default function DenetimTakipApp({ onBack }) {
         <button onClick={() => setActiveTab('weeklyPlans')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'weeklyPlans' ? 'text-purple-600' : 'text-gray-400'}`}>
           <CalendarDays size={20} className={activeTab === 'weeklyPlans' ? 'stroke-[2.5px]' : 'stroke-2'} />
           <span className="text-[9px] font-bold">Planlar</span>
-        </button>
-
-        <button onClick={() => setActiveTab('allNotes')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'allNotes' ? 'text-yellow-600' : 'text-gray-400'}`}>
-          <FileText size={20} className={activeTab === 'allNotes' ? 'stroke-[2.5px]' : 'stroke-2'} />
-          <span className="text-[9px] font-bold">Notlar</span>
         </button>
 
         <button onClick={() => setActiveTab('wheel')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'wheel' ? 'text-indigo-600' : 'text-gray-400'}`}>

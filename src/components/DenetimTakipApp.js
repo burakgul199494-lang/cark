@@ -1162,8 +1162,17 @@ export default function DenetimTakipApp({ onBack }) {
                   {uAudits.map((a, i) => (
                     <div key={a.id} className="flex flex-col p-3 bg-gray-50 rounded-xl border border-gray-100">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm font-bold text-gray-700">{formatDateDisplay(a.date)}</span>
-                        {i === 0 && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">SON ZİYARET</span>}
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-gray-700">{formatDateDisplay(a.date)}</span>
+                          {i === 0 && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">SON ZİYARET</span>}
+                        </div>
+                        <button 
+                          onClick={() => handleDeleteAudit(a.id)}
+                          className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition"
+                          title="Kaydı Sil"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                       {/* O ziyarete ait notu göster */}
                       {a.note && (

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Plus, Trash2, Search, CheckCircle2, MapPin, 
   History, ArrowLeft, AlertCircle, List, Settings, 
-  Dna, Zap, FileText, X, Shuffle, CalendarPlus, CalendarDays, Check, AlertTriangle
+  Dna, Zap, FileText, X, Shuffle, CalendarPlus, CalendarDays, Check, AlertTriangle, Download, Ban, CheckCircle
 } from 'lucide-react';
 
 import { db, auth } from '../firebase';
@@ -122,12 +122,13 @@ export default function DenetimTakipApp({ onBack }) {
   // FİLTRELEME DURUMLARI
   const [urgencyFilter, setUrgencyFilter] = useState('all'); 
   const [selectedCityFilter, setSelectedCityFilter] = useState('all'); 
+  const [recordsDateFilter, setRecordsDateFilter] = useState(''); // Kayıtlar ekranı tarih filtresi
 
   // DETAY VE NOT DURUMLARI
   const [selectedUnitForDetail, setSelectedUnitForDetail] = useState(null);
   const [unitNote, setUnitNote] = useState('');
   const [planDate, setPlanDate] = useState(getLocalYYYYMMDD()); 
-  const [detailAuditDate, setDetailAuditDate] = useState(getLocalYYYYMMDD()); // YENİ: Şube detayı içindeki tarih seçici
+  const [detailAuditDate, setDetailAuditDate] = useState(getLocalYYYYMMDD());
   const [isSavingNote, setIsSavingNote] = useState(false);
 
   // ÇARK / KURA DURUMLARI
@@ -207,7 +208,7 @@ export default function DenetimTakipApp({ onBack }) {
           ];
 
           for (const u of defaultUnits) {
-            await addDoc(collection(db, 'bireysel_birimler'), { ...u, userId: uid, notes: '', notesList: [] });
+            await addDoc(collection(db, 'bireysel_birimler'), { ...u, userId: uid, notes: '', notesList: [], isActive: true });
           }
 
           await setDoc(flagRef, { baslangicBirimleriEklendi: true }, { merge: true });
@@ -264,7 +265,8 @@ export default function DenetimTakipApp({ onBack }) {
     return Math.floor((today - auditDate) / (1000 * 60 * 60 * 24));
   };
 
-  const getStatusColor = (days) => {
+  const getStatusColor = (days, isActive) => {
+    if (isActive === false) return 'bg-gray-100 text-gray-500 border-gray-300'; // Kapalı şube
     if (days === Infinity) return 'bg-gray-100 text-gray-500 border-gray-200';
     if (days <= 15) return 'bg-green-50 text-green-700 border-green-200';
     if (days >= 16 && days <= 30) return 'bg-yellow-50 text-yellow-700 border-yellow-200';
@@ -273,7 +275,8 @@ export default function DenetimTakipApp({ onBack }) {
     return 'bg-blue-50 text-blue-700 border-blue-200';
   };
 
-  const getStatusIndicatorColor = (days) => {
+  const getStatusIndicatorColor = (days, isActive) => {
+    if (isActive === false) return 'bg-gray-400';
     if (days === Infinity) return 'bg-gray-400';
     if (days <= 15) return 'bg-green-500';
     if (days >= 16 && days <= 30) return 'bg-yellow-400';
@@ -282,7 +285,8 @@ export default function DenetimTakipApp({ onBack }) {
     return 'bg-blue-500';
   };
 
-  const getStatusLabel = (days) => {
+  const getStatusLabel = (days, isActive) => {
+    if (isActive === false) return 'Kapalı Şube';
     if (days === Infinity) return 'Hiç Gidilmedi';
     if (days === 0) return 'Bugün Gidildi';
     return `${days} Gün`;
@@ -312,13 +316,20 @@ export default function DenetimTakipApp({ onBack }) {
     if (!pendingAudit) return;
     const { unitId, date, planId } = pendingAudit;
     const uid = auth.currentUser?.uid;
+    const noteText = (withNote && pendingAuditNote.trim()) ? pendingAuditNote.trim() : "";
     
     try {
-        if (withNote && pendingAuditNote.trim()) {
-            await appendNoteToUnit(unitId, pendingAuditNote);
+        if (noteText) {
+            await appendNoteToUnit(unitId, noteText);
         }
         
-        await addDoc(collection(db, 'bireysel_denetimler'), { unitId, date, userId: uid });
+        // Denetim kaydına notu da ekleyelim (Excel ve Kayıtlar ekranı için)
+        await addDoc(collection(db, 'bireysel_denetimler'), { 
+          unitId, 
+          date, 
+          userId: uid,
+          note: noteText
+        });
         
         if (planId) {
             await deleteDoc(doc(db, 'bireysel_planlar', planId));
@@ -344,7 +355,7 @@ export default function DenetimTakipApp({ onBack }) {
       try {
         await addDoc(collection(db, 'bireysel_birimler'), {
           city: newUnit.city.trim(), district: newUnit.district.trim(), name: newUnit.name.trim(),
-          notes: '', notesList: [], userId: uid
+          notes: '', notesList: [], userId: uid, isActive: true
         });
         setNewUnit({ city: '', district: '', name: '' });
         showSuccess('Birim başarıyla eklendi.');
@@ -352,11 +363,29 @@ export default function DenetimTakipApp({ onBack }) {
     }
   };
 
+  const handleToggleUnitStatus = async (unitId, currentStatus) => {
+    try {
+      await updateDoc(doc(db, 'bireysel_birimler', unitId), {
+        isActive: currentStatus === false ? true : false // Eğer false ise true yap, true/undefined ise false yap
+      });
+      showSuccess(`Birim durumu güncellendi.`);
+    } catch (error) {
+      setErrorMsg(`Durum güncellenemedi: ${error.message}`);
+    }
+  };
+
   const handleAddAudit = () => {
     if (newAudit.unitId && newAudit.date) {
-      const isAlreadyVisited = audits.some(a => a.unitId === newAudit.unitId && a.date === newAudit.date);
-      if (isAlreadyVisited) {
-        setErrorMsg('Bu şubeye seçilen tarihte zaten bir ziyaret kaydı var!');
+      const u = units.find(x => x.id === newAudit.unitId);
+      if (u && u.isActive === false) {
+        setErrorMsg('Bu şube geçici olarak kapalı! Ziyaret eklenemez.');
+        return;
+      }
+
+      const existingAudit = audits.find(a => a.date === newAudit.date);
+      if (existingAudit) {
+        const foundUnit = units.find(x => x.id === existingAudit.unitId);
+        setErrorMsg(`${formatDateDisplay(newAudit.date)} tarihinde zaten ${foundUnit ? foundUnit.name : 'başka bir'} şubesine gidilmiş! Günde 1 kayıt girilebilir.`);
         return;
       }
       const existingPlan = plans.find(p => p.unitId === newAudit.unitId && p.date === newAudit.date);
@@ -368,9 +397,16 @@ export default function DenetimTakipApp({ onBack }) {
     e.stopPropagation();
     const today = getLocalYYYYMMDD();
     if (unitId) {
-      const isAlreadyVisited = audits.some(a => a.unitId === unitId && a.date === today);
-      if (isAlreadyVisited) {
-        setErrorMsg('Bu şubeye bugün zaten gidildi!');
+      const u = units.find(x => x.id === unitId);
+      if (u && u.isActive === false) {
+        setErrorMsg('Bu şube geçici olarak kapalı!');
+        return;
+      }
+
+      const existingAudit = audits.find(a => a.date === today);
+      if (existingAudit) {
+        const foundUnit = units.find(x => x.id === existingAudit.unitId);
+        setErrorMsg(`Bugün zaten ${foundUnit ? foundUnit.name : 'başka bir'} şubesine gidilmiş! Günde 1 kayıt girilebilir.`);
         return;
       }
       const existingPlan = plans.find(p => p.unitId === unitId && p.date === today);
@@ -438,15 +474,23 @@ export default function DenetimTakipApp({ onBack }) {
     const uid = auth.currentUser?.uid;
     if (!unitId || !date || !uid) return false;
     
-    const isAlreadyVisited = audits.some(a => a.unitId === unitId && a.date === date);
-    if (isAlreadyVisited) {
-        setErrorMsg('Bu şubeye seçilen tarihte zaten gidilmiş!');
+    const u = units.find(x => x.id === unitId);
+    if (u && u.isActive === false) {
+      setErrorMsg('Geçici olarak kapalı olan şubelere plan yapılamaz!');
+      return false;
+    }
+
+    const existingAudit = audits.find(a => a.date === date);
+    if (existingAudit) {
+        const foundUnit = units.find(x => x.id === existingAudit.unitId);
+        setErrorMsg(`${formatDateDisplay(date)} tarihinde zaten ${foundUnit ? foundUnit.name : 'başka bir'} şubesine gidilmiş!`);
         return false;
     }
 
-    const isAlreadyPlanned = plans.some(p => p.unitId === unitId && p.date === date);
-    if (isAlreadyPlanned) {
-        setErrorMsg('Bu şubeye bu tarih için zaten bir plan var!');
+    const existingPlan = plans.find(p => p.date === date);
+    if (existingPlan) {
+        const foundUnit = units.find(x => x.id === existingPlan.unitId);
+        setErrorMsg(`Bu tarih için zaten ${foundUnit ? foundUnit.name : 'başka bir'} şubeye planınız var!`);
         return false;
     }
 
@@ -462,10 +506,11 @@ export default function DenetimTakipApp({ onBack }) {
 
   const handleCompletePlan = (plan, e) => {
     e?.stopPropagation();
-    const isAlreadyVisited = audits.some(a => a.unitId === plan.unitId && a.date === plan.date);
+    const existingAudit = audits.find(a => a.date === plan.date);
     
-    if (isAlreadyVisited) {
-      setErrorMsg('Bu şubeye planlanan tarihte zaten gidilmiş! Çakışan plan listeden siliniyor...');
+    if (existingAudit) {
+      const u = units.find(x => x.id === existingAudit.unitId);
+      setErrorMsg(`Bu tarihte zaten ${u ? u.name : 'başka bir'} şubesine gidilmiş! Çakışan plan siliniyor...`);
       deleteDoc(doc(db, 'bireysel_planlar', plan.id)).catch(()=>{});
       return;
     }
@@ -517,6 +562,36 @@ export default function DenetimTakipApp({ onBack }) {
     }
   };
 
+  // EXCEL ÇIKTISI ALMA
+  const handleExportExcel = () => {
+    if (audits.length === 0) {
+      setErrorMsg("Dışa aktarılacak kayıt bulunmuyor.");
+      return;
+    }
+    // UTF-8 BOM ekliyoruz ki Excel Türkçe karakterleri düzgün tanısın
+    let csvContent = "\uFEFF";
+    csvContent += "İl,İlçe,Birim Adı,Ziyaret Tarihi,Not\n";
+
+    const sortedAudits = [...audits].sort((a,b) => new Date(b.date) - new Date(a.date));
+
+    sortedAudits.forEach(audit => {
+      const unit = units.find(u => u.id === audit.unitId) || { city: 'Bilinmiyor/Silinmiş', district: '-', name: 'Silinmiş Birim' };
+      // Not içerisinde olası virgül ve tırnakları Excel formatına uygun hale getirelim
+      const safeNote = audit.note ? `"${audit.note.replace(/"/g, '""')}"` : "";
+      const dateStr = formatDateDisplay(audit.date);
+      csvContent += `"${unit.city}","${unit.district}","${unit.name}","${dateStr}",${safeNote}\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Ziyaret_Kayitlari_${getLocalYYYYMMDD()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // --- VERİ HAZIRLIĞI ---
   const unitStats = useMemo(() => {
     const searchTR = searchTerm.toLocaleLowerCase('tr-TR');
@@ -545,7 +620,8 @@ export default function DenetimTakipApp({ onBack }) {
         if (urgencyFilter === '0-15') return u.days <= 15;
         if (urgencyFilter === '16-30') return u.days >= 16 && u.days <= 30;
         if (urgencyFilter === '31-44') return u.days >= 31 && u.days <= 44;
-        if (urgencyFilter === '45+') return u.days >= 45 || u.days === Infinity;
+        if (urgencyFilter === '45+') return u.days >= 45 && u.days !== Infinity;
+        if (urgencyFilter === 'infinity') return u.days === Infinity;
         return true;
       })
       .sort((a, b) => {
@@ -557,12 +633,13 @@ export default function DenetimTakipApp({ onBack }) {
 
   const auditHistory = useMemo(() => {
     return audits
+      .filter(a => !recordsDateFilter || a.date === recordsDateFilter)
       .map(audit => {
         const unit = units.find(u => u.id === audit.unitId);
         return { ...audit, unitName: unit ? unit.name : 'Silinmiş Birim', unitCity: unit ? unit.city : 'Bilinmiyor' };
       })
       .sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [audits, units]);
+  }, [audits, units, recordsDateFilter]);
 
   const todaysPlans = useMemo(() => {
     const todayStr = getLocalYYYYMMDD();
@@ -586,6 +663,7 @@ export default function DenetimTakipApp({ onBack }) {
 
   const filterOptions = [
     { label: 'Tümü', value: 'all', color: 'bg-gray-400' },
+    { label: 'Hiç Gidilmedi', value: 'infinity', color: 'bg-gray-300' },
     { label: '0-15 G', value: '0-15', color: 'bg-green-500' },
     { label: '16-30 G', value: '16-30', color: 'bg-yellow-400' },
     { label: '31-44 G', value: '31-44', color: 'bg-orange-500' },
@@ -599,17 +677,19 @@ export default function DenetimTakipApp({ onBack }) {
       const lastAudit = unitAudits.length > 0 ? unitAudits.sort((a, b) => new Date(b.date) - new Date(a.date))[0].date : null;
       return { ...unit, days: getDaysPassed(lastAudit) };
     }).filter(u => wheelCityFilter === 'all' || u.city === wheelCityFilter)
+      .filter(u => u.isActive !== false) // Kapalıları kuradan çıkar
       .filter(u => {
         if (wheelUrgencyFilter === 'all') return true;
         if (wheelUrgencyFilter === '0-15') return u.days <= 15;
         if (wheelUrgencyFilter === '16-30') return u.days >= 16 && u.days <= 30;
         if (wheelUrgencyFilter === '31-44') return u.days >= 31 && u.days <= 44;
-        if (wheelUrgencyFilter === '45+') return u.days >= 45 || u.days === Infinity;
+        if (wheelUrgencyFilter === '45+') return u.days >= 45 && u.days !== Infinity;
+        if (wheelUrgencyFilter === 'infinity') return u.days === Infinity;
         return true;
       });
 
     if (eligibleUnits.length === 0) {
-      alert("Bu filtrelere uygun şube bulunamadı!");
+      alert("Bu filtrelere uygun aktif şube bulunamadı!");
       return;
     }
 
@@ -636,7 +716,7 @@ export default function DenetimTakipApp({ onBack }) {
     setSelectedUnitForDetail(unit);
     setUnitNote('');
     setPlanDate(getLocalYYYYMMDD());
-    setDetailAuditDate(getLocalYYYYMMDD()); // Detay içindeki ziyaret tarihi seçiciyi sıfırla
+    setDetailAuditDate(getLocalYYYYMMDD());
     setActiveTab('unitDetail');
     setErrorMsg('');
     setSuccessMsg('');
@@ -750,11 +830,11 @@ export default function DenetimTakipApp({ onBack }) {
          </div>
       )}
 
-      {/* ÜST BAŞLIK BARI */}
+      {/* ÜST BAŞLIK BARI (Sadeleştirildi) */}
       <div className="bg-white px-4 pt-6 pb-4 shadow-sm flex items-center justify-between sticky top-0 z-40">
         <button 
           onClick={() => {
-            if (['unitDetail', 'weeklyPlans', 'allNotes'].includes(activeTab)) setActiveTab('dashboard');
+            if (['unitDetail'].includes(activeTab)) setActiveTab('dashboard');
             else onBack();
           }} 
           className="p-2 -ml-2 text-gray-500 hover:text-gray-800 transition rounded-full active:bg-gray-100"
@@ -763,20 +843,14 @@ export default function DenetimTakipApp({ onBack }) {
         </button>
         <h1 className="text-lg font-bold flex items-center gap-2 text-gray-800">
           {activeTab === 'unitDetail' ? <><MapPin className="text-blue-600" size={22} /> Şube Detayı</> : 
-           activeTab === 'weeklyPlans' ? <><CalendarDays className="text-purple-600" size={22} /> Haftalık Shift</> : 
-           activeTab === 'allNotes' ? <><FileText className="text-yellow-500" size={22} /> Tüm Notlar</> : 
+           activeTab === 'weeklyPlans' ? <><CalendarDays className="text-purple-600" size={22} /> Planlar</> : 
+           activeTab === 'allNotes' ? <><FileText className="text-yellow-500" size={22} /> Notlar</> : 
+           activeTab === 'addAudit' ? <><History className="text-blue-600" size={22} /> Kayıtlar</> : 
+           activeTab === 'wheel' ? <><Dna className="text-purple-600" size={22} /> Kura</> : 
+           activeTab === 'units' ? <><Settings className="text-gray-600" size={22} /> Yönetim</> : 
            <><CheckCircle2 className="text-blue-600" size={22} /> Denetim Takip</>}
         </h1>
-        {activeTab === 'dashboard' ? (
-          <div className="flex gap-1 -mr-2">
-            <button onClick={() => setActiveTab('allNotes')} className="text-yellow-600 p-2 bg-yellow-50 rounded-full active:bg-yellow-100 transition" title="Tüm Notlar">
-              <FileText size={20} />
-            </button>
-            <button onClick={() => setActiveTab('weeklyPlans')} className="text-purple-600 p-2 bg-purple-50 rounded-full active:bg-purple-100 transition" title="Haftalık Planlar">
-              <CalendarDays size={20} />
-            </button>
-          </div>
-        ) : <div className="w-[88px]"></div>}
+        <div className="w-[40px]"></div> {/* Boşluk hizalaması için */}
       </div>
 
       {/* UYARI VE BAŞARI MESAJLARI */}
@@ -858,7 +932,7 @@ export default function DenetimTakipApp({ onBack }) {
                   onClick={() => setUrgencyFilter(f.value)}
                   className={`flex-none px-3 py-1.5 rounded-lg shadow-sm border flex items-center gap-1.5 text-xs font-bold transition-all ${urgencyFilter === f.value ? 'bg-blue-50 border-blue-200 text-blue-700 scale-[1.02]' : 'bg-white border-gray-100 text-gray-600'}`}
                 >
-                  {f.value !== 'all' && <div className={`w-2.5 h-2.5 rounded-full ${f.color}`}></div>}
+                  {f.value !== 'all' && f.value !== 'infinity' && <div className={`w-2.5 h-2.5 rounded-full ${f.color}`}></div>}
                   {f.label}
                 </button>
               ))}
@@ -873,22 +947,25 @@ export default function DenetimTakipApp({ onBack }) {
             <div className="grid gap-3">
               {unitStats.map(unit => {
                 const latestNote = unit.notesList && unit.notesList.length > 0 ? unit.notesList[0].text : unit.notes;
-                
+                const isInactive = unit.isActive === false;
+
                 return (
                 <div 
                   key={unit.id} 
                   onClick={() => openUnitDetail(unit)}
-                  className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-2 active:scale-[0.98] transition-transform cursor-pointer relative overflow-hidden"
+                  className={`bg-white p-3.5 rounded-2xl shadow-sm border flex flex-col gap-2 active:scale-[0.98] transition-transform cursor-pointer relative overflow-hidden ${isInactive ? 'border-red-200 opacity-80' : 'border-gray-100'}`}
                 >
-                  <div className={`absolute top-0 left-0 w-1 h-full ${getStatusIndicatorColor(unit.days)}`}></div>
+                  <div className={`absolute top-0 left-0 w-1 h-full ${getStatusIndicatorColor(unit.days, unit.isActive)}`}></div>
                   
                   <div className="flex justify-between items-start pl-2 gap-2">
                     {/* SOL TARAF */}
                     <div className="min-w-0 flex-1"> 
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide truncate">
-                        {unit.city} {unit.district ? `• ${unit.district}` : ''}
+                      <p className={`text-[10px] font-bold uppercase tracking-wide truncate ${isInactive ? 'text-red-400' : 'text-gray-400'}`}>
+                        {unit.city} {unit.district ? `• ${unit.district}` : ''} {isInactive && '• KAPALI'}
                       </p>
-                      <h3 className="font-bold text-gray-800 text-[15px] leading-tight mt-0.5 truncate">{unit.name}</h3>
+                      <h3 className={`font-bold text-[15px] leading-tight mt-0.5 truncate ${isInactive ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-800'}`}>
+                        {unit.name}
+                      </h3>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
                         <p className="text-[11px] text-gray-500 flex items-center gap-1 font-medium whitespace-nowrap">
                           <Calendar size={12} className="text-gray-400" /> {formatDateDisplay(unit.lastAudit)}
@@ -901,25 +978,27 @@ export default function DenetimTakipApp({ onBack }) {
                     
                     {/* SAĞ TARAF: Butonlar */}
                     <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusColor(unit.days)} text-center w-full`}>
-                        {getStatusLabel(unit.days)}
+                      <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusColor(unit.days, unit.isActive)} text-center w-full`}>
+                        {getStatusLabel(unit.days, unit.isActive)}
                       </div>
                       <div className="flex gap-1">
                          <button 
+                           disabled={isInactive}
                            onClick={(e) => {
                              e.stopPropagation();
                              setQuickPlanUnit(unit);
                              setQuickPlanDate(getLocalYYYYMMDD());
                            }}
-                           className="flex items-center gap-1 text-[10px] font-bold bg-purple-50 text-purple-600 px-2 py-1.5 rounded-lg active:bg-purple-100 transition-colors whitespace-nowrap"
+                           className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1.5 rounded-lg whitespace-nowrap transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-purple-50 text-purple-600 active:bg-purple-100'}`}
                          >
                            <CalendarPlus size={12} /> Planla
                          </button>
                          <button 
+                           disabled={isInactive}
                            onClick={(e) => handleQuickAddAudit(unit.id, e)}
-                           className="flex items-center gap-1 text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-1.5 rounded-lg active:bg-blue-100 transition-colors whitespace-nowrap"
+                           className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1.5 rounded-lg whitespace-nowrap transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-600 active:bg-blue-100'}`}
                          >
-                           <Zap size={12} className="fill-blue-600" /> Gidildi
+                           <Zap size={12} className={isInactive ? "" : "fill-blue-600"} /> Gidildi
                          </button>
                       </div>
                     </div>
@@ -992,8 +1071,6 @@ export default function DenetimTakipApp({ onBack }) {
         {/* HAFTALIK SHIFT / TÜM PLANLAR EKRANI */}
         {activeTab === 'weeklyPlans' && (
           <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
-            <h2 className="text-xl font-bold text-gray-800 mb-2">Gelecek Planlar</h2>
-            
             {plans.length === 0 ? (
               <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">
                 Henüz yapılmış bir planınız bulunmuyor.
@@ -1038,21 +1115,24 @@ export default function DenetimTakipApp({ onBack }) {
         {activeTab === 'unitDetail' && selectedUnitForDetail && (() => {
           const uAudits = audits.filter(a => a.unitId === selectedUnitForDetail.id).sort((a,b) => new Date(b.date) - new Date(a.date));
           const unitNotes = selectedUnitForDetail.notesList || []; 
+          const isInactive = selectedUnitForDetail.isActive === false;
           
           return (
             <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
               
               <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden">
-                <div className={`absolute top-0 left-0 w-full h-1 ${getStatusIndicatorColor(selectedUnitForDetail.days)}`}></div>
+                <div className={`absolute top-0 left-0 w-full h-1 ${getStatusIndicatorColor(selectedUnitForDetail.days, selectedUnitForDetail.isActive)}`}></div>
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-800">{selectedUnitForDetail.name}</h2>
+                    <h2 className={`text-xl font-bold ${isInactive ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-800'}`}>
+                      {selectedUnitForDetail.name}
+                    </h2>
                     <p className="text-sm font-medium text-gray-500 mt-1 flex items-center gap-1">
                       <MapPin size={14}/> {selectedUnitForDetail.city} / {selectedUnitForDetail.district}
                     </p>
                   </div>
-                  <div className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border ${getStatusColor(selectedUnitForDetail.days)}`}>
-                    {getStatusLabel(selectedUnitForDetail.days)}
+                  <div className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border ${getStatusColor(selectedUnitForDetail.days, selectedUnitForDetail.isActive)}`}>
+                    {getStatusLabel(selectedUnitForDetail.days, selectedUnitForDetail.isActive)}
                   </div>
                 </div>
 
@@ -1067,55 +1147,64 @@ export default function DenetimTakipApp({ onBack }) {
                   </div>
                 </div>
 
-                {/* PLANLAMA ALANI */}
-                <div className="mb-6 p-4 bg-purple-50 rounded-xl border border-purple-100">
-                  <label className="text-xs font-bold text-purple-800 flex items-center gap-1 mb-2">
-                    <CalendarPlus size={14}/> Bu Şubeye Plan Yap
-                  </label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="date" 
-                      className="flex-1 p-2 rounded-lg border border-purple-200 text-sm font-medium outline-none focus:ring-2 focus:ring-purple-400"
-                      value={planDate}
-                      onChange={(e) => setPlanDate(e.target.value)}
-                    />
-                    <button 
-                      onClick={() => handleAddPlan(selectedUnitForDetail.id, planDate)}
-                      className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition"
-                    >
-                      Planla
-                    </button>
+                {isInactive ? (
+                  <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl border border-red-200 text-center font-bold text-sm flex items-center justify-center gap-2">
+                    <Ban size={18} /> Bu şube geçici olarak kapalıdır. Plan veya ziyaret eklenemez.
                   </div>
-                </div>
+                ) : (
+                  <>
+                    {/* PLANLAMA ALANI */}
+                    <div className="mb-6 p-4 bg-purple-50 rounded-xl border border-purple-100">
+                      <label className="text-xs font-bold text-purple-800 flex items-center gap-1 mb-2">
+                        <CalendarPlus size={14}/> Bu Şubeye Plan Yap
+                      </label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="date" 
+                          className="flex-1 p-2 rounded-lg border border-purple-200 text-sm font-medium outline-none focus:ring-2 focus:ring-purple-400"
+                          value={planDate}
+                          onChange={(e) => setPlanDate(e.target.value)}
+                        />
+                        <button 
+                          onClick={() => handleAddPlan(selectedUnitForDetail.id, planDate)}
+                          className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition"
+                        >
+                          Planla
+                        </button>
+                      </div>
+                    </div>
 
-                {/* ZİYARET EKLEME ALANI (Geçmiş veya Bugün İçin) */}
-                <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
-                  <label className="text-xs font-bold text-blue-800 flex items-center gap-1 mb-2">
-                    <CheckCircle2 size={14}/> Ziyaret Kaydı Ekle
-                  </label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="date" 
-                      className="flex-1 p-2 rounded-lg border border-blue-200 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-400"
-                      value={detailAuditDate}
-                      onChange={(e) => setDetailAuditDate(e.target.value)}
-                    />
-                    <button 
-                      onClick={() => {
-                        const isAlreadyVisited = audits.some(a => a.unitId === selectedUnitForDetail.id && a.date === detailAuditDate);
-                        if (isAlreadyVisited) {
-                          setErrorMsg('Bu şubeye seçilen tarihte zaten gidilmiş!');
-                          return;
-                        }
-                        const existingPlan = plans.find(p => p.unitId === selectedUnitForDetail.id && p.date === detailAuditDate);
-                        setPendingAudit({ unitId: selectedUnitForDetail.id, date: detailAuditDate, planId: existingPlan?.id, step: 'ask' });
-                      }}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition"
-                    >
-                      Ekle
-                    </button>
-                  </div>
-                </div>
+                    {/* ZİYARET EKLEME ALANI (Geçmiş veya Bugün İçin) */}
+                    <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                      <label className="text-xs font-bold text-blue-800 flex items-center gap-1 mb-2">
+                        <CheckCircle2 size={14}/> Ziyaret Kaydı Ekle
+                      </label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="date" 
+                          className="flex-1 p-2 rounded-lg border border-blue-200 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-400"
+                          value={detailAuditDate}
+                          onChange={(e) => setDetailAuditDate(e.target.value)}
+                        />
+                        <button 
+                          onClick={() => {
+                            const existingAudit = audits.find(a => a.date === detailAuditDate);
+                            if (existingAudit) {
+                              const foundUnit = units.find(x => x.id === existingAudit.unitId);
+                              setErrorMsg(`${formatDateDisplay(detailAuditDate)} tarihinde zaten ${foundUnit ? foundUnit.name : 'başka bir'} şubesine gidilmiş!`);
+                              return;
+                            }
+                            const existingPlan = plans.find(p => p.unitId === selectedUnitForDetail.id && p.date === detailAuditDate);
+                            setPendingAudit({ unitId: selectedUnitForDetail.id, date: detailAuditDate, planId: existingPlan?.id, step: 'ask' });
+                          }}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition"
+                        >
+                          Ekle
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {/* NOT EKLEME ALANI */}
                 <div className="space-y-2 mb-4 border-t border-gray-100 pt-4">
@@ -1220,6 +1309,7 @@ export default function DenetimTakipApp({ onBack }) {
                     value={wheelUrgencyFilter} onChange={e => setWheelUrgencyFilter(e.target.value)}
                   >
                     <option value="all">Farketmez</option>
+                    <option value="infinity">Hiç Gidilmedi</option>
                     <option value="16-30">16-30 Gün (Sarı)</option>
                     <option value="31-44">31-44 Gün (Turuncu)</option>
                     <option value="45+">45+ Gün (Kırmızı)</option>
@@ -1276,7 +1366,7 @@ export default function DenetimTakipApp({ onBack }) {
           </div>
         )}
 
-        {/* DENETİM EKLE EKRANI */}
+        {/* KAYITLAR VE DENETİM EKLE EKRANI */}
         {activeTab === 'addAudit' && (
            <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-300">
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
@@ -1285,14 +1375,14 @@ export default function DenetimTakipApp({ onBack }) {
               </h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 ml-1">Birim Seç</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 ml-1">Aktif Birim Seç</label>
                   <select 
                     className="w-full p-4 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700 text-sm transition"
                     value={newAudit.unitId}
                     onChange={(e) => setNewAudit({...newAudit, unitId: e.target.value})}
                   >
                     <option value="">Listedeki birimlerden seçin...</option>
-                    {[...units].sort((a,b) => {
+                    {[...units].filter(u => u.isActive !== false).sort((a,b) => {
                       const c = a.city.localeCompare(b.city, 'tr');
                       if (c !== 0) return c;
                       return a.name.localeCompare(b.name, 'tr');
@@ -1320,22 +1410,56 @@ export default function DenetimTakipApp({ onBack }) {
               </div>
             </div>
 
+            {/* ZİYARET GEÇMİŞİ VE EXCEL */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden pb-4">
-              <div className="p-4 border-b border-gray-50 flex items-center gap-2">
-                <History size={18} className="text-gray-400" />
-                <span className="font-bold text-gray-700 text-sm">Son Girilenler</span>
+              <div className="p-4 border-b border-gray-50 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <History size={18} className="text-blue-600" />
+                    <span className="font-bold text-gray-800 text-sm">Ziyaret Kayıtları</span>
+                  </div>
+                  <button 
+                    onClick={handleExportExcel}
+                    className="flex items-center gap-1.5 text-xs font-bold bg-green-50 text-green-700 px-3 py-1.5 rounded-lg border border-green-200 hover:bg-green-100 transition active:scale-95"
+                  >
+                    <Download size={14}/> Excel'e Aktar
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-xl border border-gray-200">
+                   <Search size={16} className="text-gray-400 ml-1"/>
+                   <input 
+                     type="date" 
+                     className="bg-transparent text-sm font-medium text-gray-700 outline-none flex-1"
+                     value={recordsDateFilter}
+                     onChange={(e) => setRecordsDateFilter(e.target.value)}
+                   />
+                   {recordsDateFilter && (
+                     <button onClick={() => setRecordsDateFilter('')} className="text-red-400 p-1">
+                       <X size={16}/>
+                     </button>
+                   )}
+                </div>
               </div>
-              <div className="divide-y divide-gray-50 max-h-[300px] overflow-y-auto">
+
+              <div className="divide-y divide-gray-50 max-h-[400px] overflow-y-auto">
+                {auditHistory.length === 0 && <p className="text-sm text-gray-400 italic p-6 text-center">Bu tarihte kayıt bulunamadı.</p>}
                 {auditHistory.map(audit => (
-                  <div key={audit.id} className="p-4 flex justify-between items-center bg-white hover:bg-gray-50 transition">
-                    <div>
+                  <div key={audit.id} className="p-4 flex justify-between items-start bg-white hover:bg-gray-50 transition">
+                    <div className="flex-1">
                       <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">{audit.unitCity}</p>
                       <p className="font-bold text-gray-800 text-sm mt-0.5">{audit.unitName}</p>
                       <p className="text-xs text-gray-400 font-medium mt-1">{formatDateDisplay(audit.date)}</p>
+                      {/* O ZİYARETE AİT NOTU GÖSTERME */}
+                      {audit.note && (
+                        <div className="mt-2 bg-yellow-50 p-2 rounded-lg border border-yellow-100 flex items-start gap-1.5">
+                          <FileText size={12} className="text-yellow-600 mt-0.5 shrink-0"/>
+                          <p className="text-[11px] text-gray-700 italic">{audit.note}</p>
+                        </div>
+                      )}
                     </div>
                     <button 
                       onClick={() => handleDeleteAudit(audit.id)}
-                      className="p-3 text-gray-300 hover:text-red-500 active:bg-red-50 rounded-xl transition"
+                      className="p-3 text-gray-300 hover:text-red-500 active:bg-red-50 rounded-xl transition shrink-0"
                     >
                       <Trash2 size={20} />
                     </button>
@@ -1412,25 +1536,37 @@ export default function DenetimTakipApp({ onBack }) {
                 </div>
                 <span className="text-xs font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded">{units.length} Adet</span>
               </div>
-              <div className="divide-y divide-gray-50 max-h-[350px] overflow-y-auto">
+              <div className="divide-y divide-gray-50 max-h-[400px] overflow-y-auto">
                 {units.length === 0 && <p className="text-sm text-gray-400 italic p-4 text-center">Sistemde şubeniz bulunmuyor.</p>}
-                {units.sort((a,b) => a.city.localeCompare(b.city,'tr')).map(unit => (
-                  <div key={unit.id} className="p-4 flex justify-between items-center hover:bg-gray-50 transition group">
-                    <div>
-                      <p className="font-bold text-sm text-gray-800">{unit.name}</p>
-                      <p className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1">
-                        <MapPin size={10}/> {unit.district} / {unit.city}
-                      </p>
+                {units.sort((a,b) => a.city.localeCompare(b.city,'tr')).map(unit => {
+                  const isInactive = unit.isActive === false;
+                  return (
+                    <div key={unit.id} className={`p-4 flex justify-between items-center transition ${isInactive ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+                      <div className="flex-1">
+                        <p className={`font-bold text-sm ${isInactive ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{unit.name}</p>
+                        <p className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1">
+                          <MapPin size={10}/> {unit.district} / {unit.city} {isInactive && <span className="text-red-500 font-bold ml-1">(KAPALI)</span>}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={() => handleToggleUnitStatus(unit.id, unit.isActive)}
+                          className={`p-2 rounded-xl transition ${isInactive ? 'text-green-600 hover:bg-green-100' : 'text-orange-500 hover:bg-orange-100'}`}
+                          title={isInactive ? "Şubeyi Aç" : "Geçici Olarak Kapat"}
+                        >
+                          {isInactive ? <CheckCircle size={18} /> : <Ban size={18} />}
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteUnit(unit.id)}
+                          className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition"
+                          title="Şubeyi Komple Sil"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </div>
-                    <button 
-                      onClick={() => handleDeleteUnit(unit.id)}
-                      className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition"
-                      title="Şubeyi Sil"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
 
@@ -1452,36 +1588,39 @@ export default function DenetimTakipApp({ onBack }) {
 
       </div>
 
-      {/* MOBİL ALT NAVİGASYON BARI */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around items-center pb-safe z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.02)] h-16 px-1">
-        <button 
-          onClick={() => setActiveTab('dashboard')} 
-          className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${['dashboard', 'unitDetail', 'weeklyPlans', 'allNotes'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}
-        >
-          <List size={22} className={['dashboard', 'unitDetail', 'weeklyPlans', 'allNotes'].includes(activeTab) ? 'stroke-[2.5px]' : 'stroke-2'} />
-          <span className="text-[10px] font-bold">Liste</span>
+      {/* MOBİL ALT NAVİGASYON BARI (6 BUTON) */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-between items-center pb-safe z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.02)] h-[70px] px-1 md:px-4">
+        
+        <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${['dashboard', 'unitDetail'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}>
+          <List size={20} className={['dashboard', 'unitDetail'].includes(activeTab) ? 'stroke-[2.5px]' : 'stroke-2'} />
+          <span className="text-[9px] font-bold">Liste</span>
         </button>
-        <button 
-          onClick={() => setActiveTab('wheel')} 
-          className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'wheel' ? 'text-purple-600' : 'text-gray-400'}`}
-        >
-          <Dna size={22} className={activeTab === 'wheel' ? 'stroke-[2.5px]' : 'stroke-2'} />
-          <span className="text-[10px] font-bold">Kura</span>
+        
+        <button onClick={() => setActiveTab('weeklyPlans')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'weeklyPlans' ? 'text-purple-600' : 'text-gray-400'}`}>
+          <CalendarDays size={20} className={activeTab === 'weeklyPlans' ? 'stroke-[2.5px]' : 'stroke-2'} />
+          <span className="text-[9px] font-bold">Planlar</span>
         </button>
-        <button 
-          onClick={() => setActiveTab('addAudit')} 
-          className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'addAudit' ? 'text-blue-600' : 'text-gray-400'}`}
-        >
-          <History size={22} className={activeTab === 'addAudit' ? 'stroke-[2.5px]' : 'stroke-2'} />
-          <span className="text-[10px] font-bold">Kayıtlar</span>
+
+        <button onClick={() => setActiveTab('allNotes')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'allNotes' ? 'text-yellow-600' : 'text-gray-400'}`}>
+          <FileText size={20} className={activeTab === 'allNotes' ? 'stroke-[2.5px]' : 'stroke-2'} />
+          <span className="text-[9px] font-bold">Notlar</span>
         </button>
-        <button 
-          onClick={() => setActiveTab('units')} 
-          className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'units' ? 'text-blue-600' : 'text-gray-400'}`}
-        >
-          <Settings size={22} className={activeTab === 'units' ? 'stroke-[2.5px]' : 'stroke-2'} />
-          <span className="text-[10px] font-bold">Yönetim</span>
+
+        <button onClick={() => setActiveTab('wheel')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'wheel' ? 'text-indigo-600' : 'text-gray-400'}`}>
+          <Dna size={20} className={activeTab === 'wheel' ? 'stroke-[2.5px]' : 'stroke-2'} />
+          <span className="text-[9px] font-bold">Kura</span>
         </button>
+
+        <button onClick={() => setActiveTab('addAudit')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'addAudit' ? 'text-blue-600' : 'text-gray-400'}`}>
+          <History size={20} className={activeTab === 'addAudit' ? 'stroke-[2.5px]' : 'stroke-2'} />
+          <span className="text-[9px] font-bold">Kayıtlar</span>
+        </button>
+
+        <button onClick={() => setActiveTab('units')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition ${activeTab === 'units' ? 'text-gray-800' : 'text-gray-400'}`}>
+          <Settings size={20} className={activeTab === 'units' ? 'stroke-[2.5px]' : 'stroke-2'} />
+          <span className="text-[9px] font-bold">Yönetim</span>
+        </button>
+
       </div>
 
     </div>

@@ -6,10 +6,21 @@ export default function AnaSayfa() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in max-w-4xl mx-auto">
       
+      {/* Denetim Takip */}
+      <Link to="/denetim" className="no-underline group md:col-span-2">
+        <MenuCard 
+          title="Denetim Takip" 
+          desc="Birimlerin denetim süreleri ve akıllı rotasyon." 
+          icon={<MapPin size={48} className="text-teal-600 group-hover:scale-110 transition-transform"/>} 
+          color="border-teal-500" 
+          bg="bg-teal-50" 
+        />
+      </Link>
+
       {/* Sevkiyat Planla */}
       <Link to="/sevkiyat" className="no-underline group">
         <MenuCard 
-          title="Sevkiyat Planlaa" 
+          title="Sevkiyat Planla" 
           desc="Stok ve ciro bazlı hesaplama." 
           icon={<Truck size={48} className="text-blue-600 group-hover:scale-110 transition-transform"/>} 
           color="border-blue-500" 
@@ -25,17 +36,6 @@ export default function AnaSayfa() {
           icon={<CalendarCheck size={48} className="text-orange-600 group-hover:scale-110 transition-transform"/>} 
           color="border-orange-500" 
           bg="bg-orange-50" 
-        />
-      </Link>
-
-      {/* Denetim Takip */}
-      <Link to="/denetim" className="no-underline group md:col-span-2">
-        <MenuCard 
-          title="Denetim Takip" 
-          desc="Birimlerin denetim süreleri ve akıllı rotasyon." 
-          icon={<MapPin size={48} className="text-teal-600 group-hover:scale-110 transition-transform"/>} 
-          color="border-teal-500" 
-          bg="bg-teal-50" 
         />
       </Link>
 

@@ -6,8 +6,19 @@ import { db, auth } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { TURKEY_DATA, getLocalYYYYMMDD, formatDateDisplay, getDaysPassed, getStatusColor, getStatusIndicatorColor, getStatusLabel, filterOptions } from '../utils/denetimVerileri';
 
-// --- 1. DASHBOARD VIEW ---
-export function DashboardView({ units, audits, plans, openUnitDetail, setQuickPlanUnit, setQuickPlanDate, setQuickAuditUnit, setQuickAuditDate, handleQuickAddAudit, handleDeletePlan, handleCompletePlan }) {
+export function DashboardView({ 
+  units, 
+  audits, 
+  plans, 
+  openUnitDetail, 
+  setQuickPlanUnit, 
+  setQuickPlanDate, 
+  setQuickAuditUnit, 
+  setQuickAuditDate, 
+  handleQuickAddAudit, 
+  handleDeletePlan, 
+  handleCompletePlan 
+}) {
   const [searchTerm, setSearchTerm] = useState('');
   const [urgencyFilter, setUrgencyFilter] = useState('all'); 
   const [selectedCityFilter, setSelectedCityFilter] = useState('all'); 
@@ -29,11 +40,17 @@ export function DashboardView({ units, audits, plans, openUnitDetail, setQuickPl
       const unitPlans = plans.filter(p => p.unitId === unit.id && p.date >= getLocalYYYYMMDD()).sort((a,b) => new Date(a.date) - new Date(b.date));
       const lastAuditObj = unitAudits.length > 0 ? unitAudits.sort((a, b) => new Date(b.date) - new Date(a.date))[0] : null;
       return { 
-        ...unit, lastAudit: lastAuditObj ? lastAuditObj.date : null, latestNote: lastAuditObj ? lastAuditObj.note : unit.notes, 
-        totalVisits: unitAudits.length, days: getDaysPassed(lastAuditObj ? lastAuditObj.date : null), nextPlan: unitPlans.length > 0 ? unitPlans[0] : null
+        ...unit, 
+        lastAudit: lastAuditObj ? lastAuditObj.date : null, 
+        latestNote: lastAuditObj ? lastAuditObj.note : null, 
+        totalVisits: unitAudits.length, 
+        days: getDaysPassed(lastAuditObj ? lastAuditObj.date : null), 
+        nextPlan: unitPlans.length > 0 ? unitPlans[0] : null
       };
     }).filter(u => {
-      const uName = u.name.toLocaleLowerCase('tr-TR'); const uDist = u.district.toLocaleLowerCase('tr-TR'); const uCity = u.city.toLocaleLowerCase('tr-TR');
+      const uName = u.name.toLocaleLowerCase('tr-TR'); 
+      const uDist = u.district.toLocaleLowerCase('tr-TR'); 
+      const uCity = u.city.toLocaleLowerCase('tr-TR');
       return uName.includes(searchTR) || uDist.includes(searchTR) || uCity.includes(searchTR);
     }).filter(u => selectedCityFilter === 'all' || u.city === selectedCityFilter).filter(u => {
       if (urgencyFilter === 'all') return true;
@@ -52,9 +69,10 @@ export function DashboardView({ units, audits, plans, openUnitDetail, setQuickPl
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
+      {/* Bugünün Planları */}
       {todaysPlans.length > 0 && (
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-4 shadow-lg text-white">
-          <h3 className="font-bold text-sm flex items-center gap-2 mb-3 opacity-90"><Calendar size={16} /> Bugünün Planlanan Şubeleri</h3>
+          <h3 className="font-bold text-sm flex items-center gap-2 mb-3 opacity-90"><Calendar size={16} /> Bugünün Planları</h3>
           <div className="space-y-2">
             {todaysPlans.map(plan => (
               <div key={plan.id} className="bg-white/10 p-3 rounded-xl flex items-center justify-between border border-white/20">
@@ -63,7 +81,7 @@ export function DashboardView({ units, audits, plans, openUnitDetail, setQuickPl
                   <p className="text-[10px] opacity-75">{plan.district}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  <button onClick={(e) => handleDeletePlan(plan.id, e)} className="p-2 bg-red-500/20 text-red-100 rounded-lg hover:bg-red-500/40 transition"><X size={16} /></button>
+                  <button onClick={(e) => handleDeletePlan(plan.id, e)} className="p-2 bg-red-500/20 text-red-100 rounded-lg"><X size={16} /></button>
                   <button onClick={(e) => handleCompletePlan(plan, e)} className="px-3 py-1.5 bg-white text-blue-600 text-xs font-bold rounded-lg flex items-center gap-1 active:scale-95 transition"><Check size={14} /> Gidildi</button>
                 </div>
               </div>
@@ -72,17 +90,19 @@ export function DashboardView({ units, audits, plans, openUnitDetail, setQuickPl
         </div>
       )}
 
+      {/* Arama ve Filtreler */}
       <div className="flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input type="text" placeholder="Şube veya İlçe Ara..." className="w-full pl-10 pr-3 py-3.5 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition font-medium text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          <input type="text" placeholder="Şube veya İlçe Ara..." className="w-full pl-10 pr-3 py-3.5 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
-        <select className="w-1/3 px-2 py-3.5 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition font-bold text-gray-700 text-xs sm:text-sm text-center truncate" value={selectedCityFilter} onChange={(e) => setSelectedCityFilter(e.target.value)}>
+        <select className="w-1/3 px-2 py-3.5 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700 text-xs text-center truncate" value={selectedCityFilter} onChange={(e) => setSelectedCityFilter(e.target.value)}>
           <option value="all">İl</option>
           {activeCities.map(city => <option key={city} value={city}>{city}</option>)}
         </select>
       </div>
 
+      {/* Aciliyet Filtreleri */}
       <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
         {filterOptions.map(f => (
           <button key={f.value} onClick={() => setUrgencyFilter(f.value)} className={`flex-none px-3 py-1.5 rounded-lg shadow-sm border flex items-center gap-1.5 text-xs font-bold transition-all ${urgencyFilter === f.value ? 'bg-blue-50 border-blue-200 text-blue-700 scale-[1.02]' : 'bg-white border-gray-100 text-gray-600'}`}>
@@ -92,41 +112,78 @@ export function DashboardView({ units, audits, plans, openUnitDetail, setQuickPl
         ))}
       </div>
 
-      <div className="px-2 text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-[-5px]">Toplam Listelenen: <span className="text-blue-500">{unitStats.length} Şube</span></div>
-
+      {/* Birim Kartları */}
       <div className="grid gap-3">
         {unitStats.map(unit => {
           const isInactive = unit.isActive === false;
           return (
-          <div key={unit.id} onClick={() => openUnitDetail(unit)} className={`bg-white p-3.5 rounded-2xl shadow-sm border flex flex-col gap-2 active:scale-[0.98] transition-transform cursor-pointer relative overflow-hidden ${isInactive ? 'border-red-200 opacity-80' : 'border-gray-100'}`}>
-            <div className={`absolute top-0 left-0 w-1 h-full ${getStatusIndicatorColor(unit.days, unit.isActive)}`}></div>
-            <div className="flex justify-between items-start pl-2 gap-2">
-              <div className="min-w-0 flex-1"> 
-                <p className={`text-[10px] font-bold uppercase tracking-wide truncate ${isInactive ? 'text-red-400' : 'text-gray-400'}`}>{unit.city} {unit.district ? `• ${unit.district}` : ''} {isInactive && '• KAPALI'}</p>
-                <h3 className={`font-bold text-[15px] leading-tight mt-0.5 truncate ${isInactive ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-800'}`}>{unit.name}</h3>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-                  <p className="text-[11px] text-gray-500 flex items-center gap-1 font-medium whitespace-nowrap"><Calendar size={12} className="text-gray-400" /> {formatDateDisplay(unit.lastAudit)}</p>
-                  <p className="text-[11px] text-gray-500 flex items-center gap-1 font-medium bg-gray-50 px-1.5 py-0.5 rounded-md whitespace-nowrap"><History size={12} className="text-gray-400" /> Toplam: {unit.totalVisits}</p>
+            <div key={unit.id} onClick={() => openUnitDetail(unit)} className={`bg-white p-4 rounded-2xl shadow-sm border flex flex-col gap-3 active:scale-[0.98] transition-transform cursor-pointer relative overflow-hidden ${isInactive ? 'border-red-200 opacity-80' : 'border-gray-100'}`}>
+              <div className={`absolute top-0 left-0 w-1.5 h-full ${getStatusIndicatorColor(unit.days, unit.isActive)}`}></div>
+              
+              {/* 1. Satır: İl - İlçe */}
+              <p className={`text-[10px] font-bold uppercase tracking-wide truncate pl-1 ${isInactive ? 'text-red-400' : 'text-gray-400'}`}>
+                {unit.city} {unit.district ? `• ${unit.district}` : ''} {isInactive && '• KAPALI'}
+              </p>
+
+              {/* 2. Satır: Birim Adı */}
+              <h3 className={`font-black text-lg leading-tight truncate pl-1 ${isInactive ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-800'}`}>
+                {unit.name}
+              </h3>
+
+              {/* 3. Satır: İstatistikler */}
+              <div className="flex items-center gap-2 pl-1">
+                <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-md shrink-0 border border-gray-100">
+                   <Calendar size={12} className="text-gray-400" />
+                   <span className="text-[11px] font-bold text-gray-600">{formatDateDisplay(unit.lastAudit)}</span>
+                </div>
+                
+                <div className={`px-2 py-1 rounded-md text-[11px] font-extrabold border shrink-0 ${getStatusColor(unit.days, unit.isActive)}`}>
+                  {getStatusLabel(unit.days, unit.isActive)}
+                </div>
+
+                <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-md shrink-0 border border-gray-100">
+                   <History size={12} className="text-gray-400" />
+                   <span className="text-[11px] font-bold text-gray-600">{unit.totalVisits}</span>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-1.5 shrink-0">
-                <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusColor(unit.days, unit.isActive)} text-center w-full`}>{getStatusLabel(unit.days, unit.isActive)}</div>
-                <div className="flex flex-wrap justify-end gap-1 mt-1">
-                   <button disabled={isInactive} onClick={(e) => { e.stopPropagation(); setQuickPlanUnit(unit); setQuickPlanDate(getLocalYYYYMMDD()); }} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1.5 rounded-lg whitespace-nowrap transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-purple-50 text-purple-600 active:bg-purple-100'}`}><CalendarPlus size={12} /> Planla</button>
-                   <button disabled={isInactive} onClick={(e) => { e.stopPropagation(); setQuickAuditUnit(unit); setQuickAuditDate(getLocalYYYYMMDD()); }} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1.5 rounded-lg whitespace-nowrap transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-teal-50 text-teal-600 active:bg-teal-100'}`}><Plus size={12} /> Ekle</button>
-                   <button disabled={isInactive} onClick={(e) => handleQuickAddAudit(unit.id, e)} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1.5 rounded-lg whitespace-nowrap transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-600 active:bg-blue-100'}`}><Zap size={12} className={isInactive ? "" : "fill-blue-600"} /> Bugün</button>
+
+              {/* Plan Bilgisi */}
+              {unit.nextPlan && (
+                <div className="flex items-center gap-1 text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100 w-fit ml-1">
+                  <CalendarPlus size={12} /> Planlı: {formatDateDisplay(unit.nextPlan.date)}
                 </div>
+              )}
+
+              {/* 4. Satır: Butonlar */}
+              <div className="flex items-center gap-2 pt-1 pl-1">
+                 <button disabled={isInactive} onClick={(e) => { e.stopPropagation(); setQuickPlanUnit(unit); setQuickPlanDate(getLocalYYYYMMDD()); }} 
+                   className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-3 rounded-xl transition-colors ${isInactive ? 'bg-gray-50 text-gray-300' : 'bg-purple-50 text-purple-600 border border-purple-100'}`}
+                 >
+                   <CalendarPlus size={14} /> Planla
+                 </button>
+                 <button disabled={isInactive} onClick={(e) => { e.stopPropagation(); setQuickAuditUnit(unit); setQuickAuditDate(getLocalYYYYMMDD()); }} 
+                   className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-3 rounded-xl transition-colors ${isInactive ? 'bg-gray-50 text-gray-300' : 'bg-teal-50 text-teal-600 border border-teal-100'}`}
+                 >
+                   <Plus size={14} /> Ekle
+                 </button>
+                 <button disabled={isInactive} onClick={(e) => handleQuickAddAudit(unit.id, e)} 
+                   className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-3 rounded-xl transition-colors ${isInactive ? 'bg-gray-50 text-gray-300' : 'bg-blue-600 text-white shadow-sm shadow-blue-200'}`}
+                 >
+                   <Zap size={14} fill="white" /> Bugün
+                 </button>
               </div>
+
+              {/* Not Önizleme */}
+              {unit.latestNote && (
+                <div className="flex items-start gap-1.5 text-[11px] text-gray-500 bg-gray-50/50 p-2 rounded-lg border border-dashed border-gray-200 ml-1">
+                  <FileText size={12} className="mt-0.5 shrink-0 text-gray-400" />
+                  <p className="line-clamp-1 italic">{unit.latestNote}</p>
+                </div>
+              )}
             </div>
-            {unit.nextPlan && (
-              <div className="pl-2 mt-1"><span className="inline-flex items-center gap-1 text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100"><CalendarPlus size={12} /> Planlı: {formatDateDisplay(unit.nextPlan.date)}</span></div>
-            )}
-            {unit.latestNote && (
-              <div className="pl-2 mt-1 flex items-start gap-1.5 text-[11px] text-gray-500 bg-gray-50 p-2 rounded-lg border border-gray-100"><FileText size={12} className="mt-0.5 shrink-0 text-gray-400" /><p className="line-clamp-2 italic">{unit.latestNote}</p></div>
-            )}
-          </div>
-        )})}
-        {unitStats.length === 0 && <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">Kritere uygun birim bulunamadı.</div>}
+          )
+        })}
+        {unitStats.length === 0 && <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">Uygun birim bulunamadı.</div>}
       </div>
     </div>
   );

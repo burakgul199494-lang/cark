@@ -817,7 +817,7 @@ export default function DenetimTakipApp({ onBack }) {
          </div>
       )}
 
-      {/* --- GEÇMİŞ ZİYARET EKLEME MODALI (YENİ) --- */}
+{/* --- GEÇMİŞ ZİYARET EKLEME MODALI --- */}
       {pastAuditUnit && (
          <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl w-full max-w-[340px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 p-6 text-center">
@@ -825,15 +825,19 @@ export default function DenetimTakipApp({ onBack }) {
                 <History size={32} />
               </div>
               <h3 className="font-bold text-lg text-gray-800 mb-2">Ziyaret Kaydı Ekle</h3>
-              <p className="text-sm text-gray-500 mb-4"><strong>{pastAuditUnit.name}</strong> şubesine yapılan ziyaretin tarihini seçin:</p>
+              <p className="text-sm text-gray-500 mb-4"><strong>{pastAuditUnit.name}</strong> şubesi için ziyaret tarihini seçin:</p>
               
-              <input 
-                type="date" 
-                max={getLocalYYYYMMDD()}
-                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold block text-center text-gray-700 outline-none focus:ring-2 focus:ring-green-500 mb-6"
-                value={pastAuditDate}
-                onChange={(e) => setPastAuditDate(e.target.value)}
-              />
+              {/* TARİH INPUTU (TAM ORTALAMA İÇİN ÖZEL SARMALAYICI) */}
+              <div className="mb-6 flex justify-center w-full bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-green-500 transition-all overflow-hidden">
+                <input 
+                  type="date" 
+                  max={getLocalYYYYMMDD()} 
+                  className="w-full p-3 bg-transparent text-sm font-bold text-gray-700 outline-none text-center appearance-none"
+                  style={{ textAlign: 'center', display: 'flex', justifyContent: 'center' }}
+                  value={pastAuditDate}
+                  onChange={(e) => setPastAuditDate(e.target.value)}
+                />
+              </div>
               
               <div className="flex gap-3">
                 <button 

@@ -118,6 +118,10 @@ export default function DenetimTakipApp({ onBack }) {
   // HIZLI PLANLAMA MODALI İÇİN STATE
   const [quickPlanUnit, setQuickPlanUnit] = useState(null);
   const [quickPlanDate, setQuickPlanDate] = useState(getLocalYYYYMMDD());
+
+  // HIZLI TARİHLİ KAYIT EKLEME MODALI İÇİN STATE
+  const [quickAuditUnit, setQuickAuditUnit] = useState(null);
+  const [quickAuditDate, setQuickAuditDate] = useState(getLocalYYYYMMDD());
   
   // FİLTRELEME DURUMLARI
   const [urgencyFilter, setUrgencyFilter] = useState('all'); 
@@ -587,7 +591,7 @@ export default function DenetimTakipApp({ onBack }) {
         return { 
           ...unit, 
           lastAudit: lastAuditObj ? lastAuditObj.date : null,
-          latestNote: lastAuditObj ? lastAuditObj.note : unit.notes, // Ana ekran görünümü için en son ziyaret notu
+          latestNote: lastAuditObj ? lastAuditObj.note : unit.notes, 
           totalVisits: unitAudits.length, 
           days: getDaysPassed(lastAuditObj ? lastAuditObj.date : null),
           nextPlan: unitPlans.length > 0 ? unitPlans[0] : null
@@ -802,6 +806,50 @@ export default function DenetimTakipApp({ onBack }) {
          </div>
       )}
 
+      {/* --- HIZLI TARİHLİ KAYIT EKLEME MODALI --- */}
+      {quickAuditUnit && (
+         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 p-6 text-center">
+              <div className="w-16 h-16 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Plus size={32} />
+              </div>
+              <h3 className="font-bold text-lg text-gray-800 mb-2">Tarihli Ziyaret Ekle</h3>
+              <p className="text-sm text-gray-500 mb-4"><strong>{quickAuditUnit.name}</strong> şubesi için ziyaret tarihi seçin:</p>
+              
+              <input 
+                type="date" 
+                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-teal-500 mb-6"
+                value={quickAuditDate}
+                onChange={(e) => setQuickAuditDate(e.target.value)}
+              />
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setQuickAuditUnit(null)} 
+                  className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold active:bg-gray-200 transition"
+                >
+                  İptal
+                </button>
+                <button 
+                  onClick={() => {
+                    const existingAudit = audits.find(a => a.date === quickAuditDate && a.unitId === quickAuditUnit.id);
+                    if (existingAudit) {
+                      setErrorMsg(`${formatDateDisplay(quickAuditDate)} tarihinde bu şubeye zaten gidilmiş!`);
+                      return;
+                    }
+                    const existingPlan = plans.find(p => p.unitId === quickAuditUnit.id && p.date === quickAuditDate);
+                    setPendingAudit({ unitId: quickAuditUnit.id, date: quickAuditDate, planId: existingPlan?.id, step: 'ask' });
+                    setQuickAuditUnit(null); // Modalı kapatıp onay/not modalına geç
+                  }} 
+                  className="flex-1 py-3 bg-teal-600 text-white rounded-xl text-sm font-bold active:bg-teal-700 transition shadow-md shadow-teal-200"
+                >
+                  Devam
+                </button>
+              </div>
+            </div>
+         </div>
+      )}
+
       {/* ÜST BAŞLIK BARI (Sadeleştirildi) */}
       <div className="bg-white px-4 pt-6 pb-4 shadow-sm flex items-center justify-between sticky top-0 z-40">
         <button 
@@ -951,7 +999,7 @@ export default function DenetimTakipApp({ onBack }) {
                       <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusColor(unit.days, unit.isActive)} text-center w-full`}>
                         {getStatusLabel(unit.days, unit.isActive)}
                       </div>
-                      <div className="flex gap-1">
+                      <div className="flex flex-wrap justify-end gap-1 mt-1">
                          <button 
                            disabled={isInactive}
                            onClick={(e) => {
@@ -965,10 +1013,21 @@ export default function DenetimTakipApp({ onBack }) {
                          </button>
                          <button 
                            disabled={isInactive}
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             setQuickAuditUnit(unit);
+                             setQuickAuditDate(getLocalYYYYMMDD());
+                           }}
+                           className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1.5 rounded-lg whitespace-nowrap transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-teal-50 text-teal-600 active:bg-teal-100'}`}
+                         >
+                           <Plus size={12} /> Ekle
+                         </button>
+                         <button 
+                           disabled={isInactive}
                            onClick={(e) => handleQuickAddAudit(unit.id, e)}
                            className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1.5 rounded-lg whitespace-nowrap transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-600 active:bg-blue-100'}`}
                          >
-                           <Zap size={12} className={isInactive ? "" : "fill-blue-600"} /> Gidildi
+                           <Zap size={12} className={isInactive ? "" : "fill-blue-600"} /> Bugün
                          </button>
                       </div>
                     </div>

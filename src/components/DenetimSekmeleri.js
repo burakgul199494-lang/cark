@@ -37,15 +37,13 @@ export function DashboardView({
     const searchTR = searchTerm.toLocaleLowerCase('tr-TR');
     return units.map(unit => {
       const unitAudits = audits.filter(a => a.unitId === unit.id);
-      const unitPlans = plans.filter(p => p.unitId === unit.id && p.date >= getLocalYYYYMMDD()).sort((a,b) => new Date(a.date) - new Date(b.date));
       const lastAuditObj = unitAudits.length > 0 ? unitAudits.sort((a, b) => new Date(b.date) - new Date(a.date))[0] : null;
       return { 
         ...unit, 
         lastAudit: lastAuditObj ? lastAuditObj.date : null, 
         latestNote: lastAuditObj ? lastAuditObj.note : null, 
         totalVisits: unitAudits.length, 
-        days: getDaysPassed(lastAuditObj ? lastAuditObj.date : null), 
-        nextPlan: unitPlans.length > 0 ? unitPlans[0] : null
+        days: getDaysPassed(lastAuditObj ? lastAuditObj.date : null)
       };
     }).filter(u => {
       const uName = u.name.toLocaleLowerCase('tr-TR'); 
@@ -60,130 +58,103 @@ export function DashboardView({
       if (urgencyFilter === '45+') return u.days >= 45 && u.days !== Infinity;
       if (urgencyFilter === 'infinity') return u.days === Infinity;
       return true;
-    }).sort((a, b) => {
-      const cityCompare = a.city.localeCompare(b.city, 'tr');
-      if (cityCompare !== 0) return cityCompare;
-      return a.name.localeCompare(b.name, 'tr');
-    });
-  }, [units, audits, plans, searchTerm, urgencyFilter, selectedCityFilter]);
+    }).sort((a, b) => a.city.localeCompare(b.city, 'tr') || a.name.localeCompare(b.name, 'tr'));
+  }, [units, audits, searchTerm, urgencyFilter, selectedCityFilter]);
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
-      {/* Bugünün Planları */}
-      {todaysPlans.length > 0 && (
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-4 shadow-lg text-white">
-          <h3 className="font-bold text-sm flex items-center gap-2 mb-3 opacity-90"><Calendar size={16} /> Bugünün Planları</h3>
-          <div className="space-y-2">
-            {todaysPlans.map(plan => (
-              <div key={plan.id} className="bg-white/10 p-3 rounded-xl flex items-center justify-between border border-white/20">
-                <div>
-                  <p className="font-bold text-sm leading-tight">{plan.unitName}</p>
-                  <p className="text-[10px] opacity-75">{plan.district}</p>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <button onClick={(e) => handleDeletePlan(plan.id, e)} className="p-2 bg-red-500/20 text-red-100 rounded-lg"><X size={16} /></button>
-                  <button onClick={(e) => handleCompletePlan(plan, e)} className="px-3 py-1.5 bg-white text-blue-600 text-xs font-bold rounded-lg flex items-center gap-1 active:scale-95 transition"><Check size={14} /> Gidildi</button>
-                </div>
-              </div>
-            ))}
+      {/* 1. ÜST KISIM: ARAMA VE FİLTRELER */}
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input type="text" placeholder="Şube ara..." className="w-full pl-10 pr-3 py-3 rounded-xl border-none bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
+          <select className="w-24 px-2 py-3 rounded-xl border-none bg-white shadow-sm font-bold text-gray-700 text-xs text-center" value={selectedCityFilter} onChange={(e) => setSelectedCityFilter(e.target.value)}>
+            <option value="all">Tüm İl</option>
+            {activeCities.map(city => <option key={city} value={city}>{city}</option>)}
+          </select>
         </div>
-      )}
-
-      {/* Arama ve Filtreler */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input type="text" placeholder="Şube veya İlçe Ara..." className="w-full pl-10 pr-3 py-3.5 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+          {filterOptions.map(f => (
+            <button key={f.value} onClick={() => setUrgencyFilter(f.value)} className={`flex-none px-3 py-1.5 rounded-lg shadow-sm border text-xs font-bold transition-all ${urgencyFilter === f.value ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-100 text-gray-600'}`}>
+              {f.label}
+            </button>
+          ))}
         </div>
-        <select className="w-1/3 px-2 py-3.5 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700 text-xs text-center truncate" value={selectedCityFilter} onChange={(e) => setSelectedCityFilter(e.target.value)}>
-          <option value="all">İl</option>
-          {activeCities.map(city => <option key={city} value={city}>{city}</option>)}
-        </select>
       </div>
 
-      {/* Aciliyet Filtreleri */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-        {filterOptions.map(f => (
-          <button key={f.value} onClick={() => setUrgencyFilter(f.value)} className={`flex-none px-3 py-1.5 rounded-lg shadow-sm border flex items-center gap-1.5 text-xs font-bold transition-all ${urgencyFilter === f.value ? 'bg-blue-50 border-blue-200 text-blue-700 scale-[1.02]' : 'bg-white border-gray-100 text-gray-600'}`}>
-            {f.value !== 'all' && f.value !== 'infinity' && <div className={`w-2.5 h-2.5 rounded-full ${f.color}`}></div>}
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Birim Kartları */}
-      <div className="grid gap-3">
+      {/* 2. LİSTE: BİRİM KARTLARI */}
+      <div className="grid gap-4">
         {unitStats.map(unit => {
           const isInactive = unit.isActive === false;
           return (
-            <div key={unit.id} onClick={() => openUnitDetail(unit)} className={`bg-white p-4 rounded-2xl shadow-sm border flex flex-col gap-3 active:scale-[0.98] transition-transform cursor-pointer relative overflow-hidden ${isInactive ? 'border-red-200 opacity-80' : 'border-gray-100'}`}>
-              <div className={`absolute top-0 left-0 w-1.5 h-full ${getStatusIndicatorColor(unit.days, unit.isActive)}`}></div>
+            <div key={unit.id} onClick={() => openUnitDetail(unit)} className={`bg-white p-4 rounded-2xl shadow-sm border-l-8 flex flex-col gap-3 relative ${isInactive ? 'opacity-70 grayscale border-gray-400' : 'border-blue-500 hover:shadow-md transition-shadow'}`} 
+                 style={{ borderLeftColor: isInactive ? '#9ca3af' : getStatusIndicatorColor(unit.days, true) }}>
               
-              {/* 1. Satır: İl - İlçe */}
-              <p className={`text-[10px] font-bold uppercase tracking-wide truncate pl-1 ${isInactive ? 'text-red-400' : 'text-gray-400'}`}>
-                {unit.city} {unit.district ? `• ${unit.district}` : ''} {isInactive && '• KAPALI'}
-              </p>
-
-              {/* 2. Satır: Birim Adı */}
-              <h3 className={`font-black text-lg leading-tight truncate pl-1 ${isInactive ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-800'}`}>
-                {unit.name}
-              </h3>
-
-              {/* 3. Satır: İstatistikler */}
-              <div className="flex items-center gap-2 pl-1">
-                <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-md shrink-0 border border-gray-100">
-                   <Calendar size={12} className="text-gray-400" />
-                   <span className="text-[11px] font-bold text-gray-600">{formatDateDisplay(unit.lastAudit)}</span>
-                </div>
-                
-                <div className={`px-2 py-1 rounded-md text-[11px] font-extrabold border shrink-0 ${getStatusColor(unit.days, unit.isActive)}`}>
+              {/* SATIR 1: İL - İLÇE */}
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                  {unit.city} • {unit.district} {isInactive && "(KAPALI)"}
+                </span>
+                <div className={`px-2 py-0.5 rounded text-[10px] font-black border ${getStatusColor(unit.days, unit.isActive)}`}>
                   {getStatusLabel(unit.days, unit.isActive)}
                 </div>
+              </div>
 
-                <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-md shrink-0 border border-gray-100">
-                   <History size={12} className="text-gray-400" />
-                   <span className="text-[11px] font-bold text-gray-600">{unit.totalVisits}</span>
+              {/* SATIR 2: BİRİM ADI (BURASI ÖNEMLİ - TEK BAŞINA) */}
+              <h2 className="text-xl font-black text-gray-800 leading-tight break-words">
+                {unit.name}
+              </h2>
+
+              {/* SATIR 3: VERİLER (SON TARİH VE TOPLAM) */}
+              <div className="flex items-center gap-4 text-gray-500">
+                <div className="flex items-center gap-1.5">
+                  <Calendar size={14} className="text-blue-500" />
+                  <span className="text-xs font-bold">{formatDateDisplay(unit.lastAudit)}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <History size={14} className="text-blue-500" />
+                  <span className="text-xs font-bold">{unit.totalVisits} Ziyaret</span>
                 </div>
               </div>
 
-              {/* Plan Bilgisi */}
-              {unit.nextPlan && (
-                <div className="flex items-center gap-1 text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100 w-fit ml-1">
-                  <CalendarPlus size={12} /> Planlı: {formatDateDisplay(unit.nextPlan.date)}
-                </div>
-              )}
-
-              {/* 4. Satır: Butonlar */}
-              <div className="flex items-center gap-2 pt-1 pl-1">
-                 <button disabled={isInactive} onClick={(e) => { e.stopPropagation(); setQuickPlanUnit(unit); setQuickPlanDate(getLocalYYYYMMDD()); }} 
-                   className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-3 rounded-xl transition-colors ${isInactive ? 'bg-gray-50 text-gray-300' : 'bg-purple-50 text-purple-600 border border-purple-100'}`}
-                 >
-                   <CalendarPlus size={14} /> Planla
-                 </button>
-                 <button disabled={isInactive} onClick={(e) => { e.stopPropagation(); setQuickAuditUnit(unit); setQuickAuditDate(getLocalYYYYMMDD()); }} 
-                   className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-3 rounded-xl transition-colors ${isInactive ? 'bg-gray-50 text-gray-300' : 'bg-teal-50 text-teal-600 border border-teal-100'}`}
-                 >
-                   <Plus size={14} /> Ekle
-                 </button>
-                 <button disabled={isInactive} onClick={(e) => handleQuickAddAudit(unit.id, e)} 
-                   className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-3 rounded-xl transition-colors ${isInactive ? 'bg-gray-50 text-gray-300' : 'bg-blue-600 text-white shadow-sm shadow-blue-200'}`}
-                 >
-                   <Zap size={14} fill="white" /> Bugün
-                 </button>
+              {/* SATIR 4: BUTONLAR (TAM GENİŞLİK) */}
+              <div className="flex gap-2 mt-1">
+                <button 
+                  disabled={isInactive}
+                  onClick={(e) => { e.stopPropagation(); setQuickPlanUnit(unit); }}
+                  className="flex-1 bg-purple-50 text-purple-700 py-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 active:scale-95 transition"
+                >
+                  <CalendarPlus size={14} /> PLANLA
+                </button>
+                <button 
+                  disabled={isInactive}
+                  onClick={(e) => { e.stopPropagation(); setQuickAuditUnit(unit); }}
+                  className="flex-1 bg-teal-50 text-teal-700 py-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 active:scale-95 transition"
+                >
+                  <Plus size={14} /> EKLE
+                </button>
+                <button 
+                  disabled={isInactive}
+                  onClick={(e) => handleQuickAddAudit(unit.id, e)}
+                  className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 active:scale-95 transition shadow-lg shadow-blue-200"
+                >
+                  <Zap size={14} fill="white" /> BUGÜN
+                </button>
               </div>
 
-              {/* Not Önizleme */}
+              {/* SON NOT ÖNİZLEME */}
               {unit.latestNote && (
-                <div className="flex items-start gap-1.5 text-[11px] text-gray-500 bg-gray-50/50 p-2 rounded-lg border border-dashed border-gray-200 ml-1">
-                  <FileText size={12} className="mt-0.5 shrink-0 text-gray-400" />
-                  <p className="line-clamp-1 italic">{unit.latestNote}</p>
+                <div className="bg-gray-50 p-2 rounded-lg border border-dashed border-gray-200">
+                  <p className="text-[11px] text-gray-500 italic line-clamp-1">
+                    <FileText size={10} className="inline mr-1" /> {unit.latestNote}
+                  </p>
                 </div>
               )}
             </div>
           )
         })}
-        {unitStats.length === 0 && <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">Uygun birim bulunamadı.</div>}
       </div>
     </div>
   );

@@ -707,10 +707,10 @@ export default function DenetimTakipApp({ onBack }) {
   return (
     <div className="min-h-screen bg-gray-50 pb-20 font-sans relative">
       
-      {/* --- ZİYARET ONAY & NOT MODALI --- */}
+{/* --- ZİYARET ONAY & NOT MODALI --- */}
       {pendingAudit && (
          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-3xl w-[95%] max-w-sm mx-auto overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
                {pendingAudit.step === 'ask' ? (
                   <div className="p-6 text-center">
                      <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -777,7 +777,7 @@ export default function DenetimTakipApp({ onBack }) {
       {/* --- HIZLI PLANLAMA MODALI --- */}
       {quickPlanUnit && (
          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 p-6 text-center">
+            <div className="bg-white rounded-3xl w-[95%] max-w-sm mx-auto overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 p-6 text-center">
               <div className="w-16 h-16 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CalendarPlus size={32} />
               </div>
@@ -787,7 +787,7 @@ export default function DenetimTakipApp({ onBack }) {
               <input 
                 type="date" 
                 min={getLocalYYYYMMDD()} /* GEÇMİŞE PLANLAMA KISITLAMASI */
-                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 mb-6"
+                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-center block text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 mb-6"
                 value={quickPlanDate}
                 onChange={(e) => setQuickPlanDate(e.target.value)}
               />
@@ -816,7 +816,7 @@ export default function DenetimTakipApp({ onBack }) {
       {/* --- GEÇMİŞ ZİYARET EKLEME MODALI (YENİ) --- */}
       {pastAuditUnit && (
          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 p-6 text-center">
+            <div className="bg-white rounded-3xl w-[95%] max-w-sm mx-auto overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 p-6 text-center">
               <div className="w-16 h-16 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <History size={32} />
               </div>
@@ -826,7 +826,7 @@ export default function DenetimTakipApp({ onBack }) {
               <input 
                 type="date" 
                 max={getLocalYYYYMMDD()} /* GELECEK TARİHE ZİYARET GİRİLEMEZ */
-                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-green-500 mb-6"
+                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-center block text-gray-700 outline-none focus:ring-2 focus:ring-green-500 mb-6"
                 value={pastAuditDate}
                 onChange={(e) => setPastAuditDate(e.target.value)}
               />

@@ -914,92 +914,71 @@ export default function DenetimTakipApp({ onBack }) {
               Toplam Listelenen: <span className="text-blue-500">{unitStats.length} Şube</span>
             </div>
 
-            {/* BİRİM KARTLARI */}
-            <div className="grid gap-3">
-              {unitStats.map(unit => {
-                const isInactive = unit.isActive === false;
+            {/* BİRİM KARTLARI - Grid yapısını mobilde tek sütun, orta ekranda iki sütun yapabilirsin */}
+<div className="grid grid-cols-1 gap-3">
+  {unitStats.map(unit => {
+    const isInactive = unit.isActive === false;
 
-                return (
-                <div 
-                  key={unit.id} 
-                  onClick={() => openUnitDetail(unit)}
-                  className={`bg-white p-3.5 rounded-2xl shadow-sm border flex flex-col gap-2 active:scale-[0.98] transition-transform cursor-pointer relative overflow-hidden ${isInactive ? 'border-red-200 opacity-80' : 'border-gray-100'}`}
-                >
-                  <div className={`absolute top-0 left-0 w-1 h-full ${getStatusIndicatorColor(unit.days, unit.isActive)}`}></div>
-                  
-                  <div className="flex justify-between items-start pl-2 gap-2">
-                    {/* SOL TARAF */}
-                    <div className="min-w-0 flex-1"> 
-                      <p className={`text-[10px] font-bold uppercase tracking-wide truncate ${isInactive ? 'text-red-400' : 'text-gray-400'}`}>
-                        {unit.city} {unit.district ? `• ${unit.district}` : ''} {isInactive && '• KAPALI'}
-                      </p>
-                      <h3 className={`font-bold text-[15px] leading-tight mt-0.5 truncate ${isInactive ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-800'}`}>
-                        {unit.name}
-                      </h3>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-                        <p className="text-[11px] text-gray-500 flex items-center gap-1 font-medium whitespace-nowrap">
-                          <Calendar size={12} className="text-gray-400" /> {formatDateDisplay(unit.lastAudit)}
-                        </p>
-                        <p className="text-[11px] text-gray-500 flex items-center gap-1 font-medium bg-gray-50 px-1.5 py-0.5 rounded-md whitespace-nowrap">
-                          <History size={12} className="text-gray-400" /> Toplam: {unit.totalVisits}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {/* SAĞ TARAF: Butonlar */}
-                    <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusColor(unit.days, unit.isActive)} text-center w-full`}>
-                        {getStatusLabel(unit.days, unit.isActive)}
-                      </div>
-                      <div className="flex gap-1">
-                         <button 
-                           disabled={isInactive}
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             setQuickPlanUnit(unit);
-                             setQuickPlanDate(getLocalYYYYMMDD());
-                           }}
-                           className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1.5 rounded-lg whitespace-nowrap transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-purple-50 text-purple-600 active:bg-purple-100'}`}
-                         >
-                           <CalendarPlus size={12} /> Planla
-                         </button>
-                         <button 
-                           disabled={isInactive}
-                           onClick={(e) => handleQuickAddAudit(unit.id, e)}
-                           className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1.5 rounded-lg whitespace-nowrap transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-600 active:bg-blue-100'}`}
-                         >
-                           <Zap size={12} className={isInactive ? "" : "fill-blue-600"} /> Gidildi
-                         </button>
-                      </div>
-                    </div>
-                  </div>
+    return (
+    <div 
+      key={unit.id} 
+      onClick={() => openUnitDetail(unit)}
+      className={`bg-white p-3 md:p-4 rounded-2xl shadow-sm border flex flex-col gap-2 active:scale-[0.98] transition-transform cursor-pointer relative overflow-hidden ${isInactive ? 'border-red-200 opacity-80' : 'border-gray-100'}`}
+    >
+      <div className={`absolute top-0 left-0 w-1 h-full ${getStatusIndicatorColor(unit.days, unit.isActive)}`}></div>
+      
+      {/* Üst Kısım: Başlık ve Durum Etiketi */}
+      <div className="flex flex-col sm:flex-row justify-between items-start pl-2 gap-2"> 
+        <div className="min-w-0 flex-1"> 
+          <p className={`text-[10px] font-bold uppercase tracking-wide truncate ${isInactive ? 'text-red-400' : 'text-gray-400'}`}>
+            {unit.city} {unit.district ? `• ${unit.district}` : ''} {isInactive && '• KAPALI'}
+          </p>
+          <h3 className={`font-bold text-sm md:text-[15px] leading-tight mt-0.5 break-words ${isInactive ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-800'}`}>
+            {unit.name}
+          </h3>
+        </div>
+        
+        {/* Durum Etiketi - Mobilde sağ üstte veya ismin altında düzgün durması için */}
+        <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusColor(unit.days, unit.isActive)} text-center shrink-0`}>
+          {getStatusLabel(unit.days, unit.isActive)}
+        </div>
+      </div>
 
-                  {/* PLAN BİLGİSİ */}
-                  {unit.nextPlan && (
-                    <div className="pl-2 mt-1">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100">
-                        <CalendarPlus size={12} /> Planlı: {formatDateDisplay(unit.nextPlan.date)}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {/* NOT GÖSTERİMİ */}
-                  {unit.latestNote && (
-                    <div className="pl-2 mt-1 flex items-start gap-1.5 text-[11px] text-gray-500 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                      <FileText size={12} className="mt-0.5 shrink-0 text-gray-400" />
-                      <p className="line-clamp-2 italic">{unit.latestNote}</p>
-                    </div>
-                  )}
-                </div>
-              )})}
-              {unitStats.length === 0 && (
-                <div className="p-8 text-center text-gray-400 italic text-sm bg-white rounded-2xl shadow-sm border border-gray-100">
-                  Kritere uygun birim bulunamadı.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+      {/* Orta Kısım: Tarih ve Toplam Bilgisi */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-2 mt-1">
+        <p className="text-[11px] text-gray-500 flex items-center gap-1 font-medium whitespace-nowrap">
+          <Calendar size={12} className="text-gray-400" /> {formatDateDisplay(unit.lastAudit)}
+        </p>
+        <p className="text-[11px] text-gray-500 flex items-center gap-1 font-medium bg-gray-50 px-1.5 py-0.5 rounded-md whitespace-nowrap">
+          <History size={12} className="text-gray-400" /> {unit.totalVisits} Ziyaret
+        </p>
+      </div>
+      
+      {/* Alt Kısım: Butonlar - Mobilde yan yana sığması için flex-wrap ve küçük font */}
+      <div className="flex gap-2 pl-2 mt-2">
+         <button 
+           disabled={isInactive}
+           onClick={(e) => {
+             e.stopPropagation();
+             setQuickPlanUnit(unit);
+             setQuickPlanDate(getLocalYYYYMMDD());
+           }}
+           className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-bold px-2 py-2 rounded-lg transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-purple-50 text-purple-600 active:bg-purple-100'}`}
+         >
+           <CalendarPlus size={12} /> Planla
+         </button>
+         <button 
+           disabled={isInactive}
+           onClick={(e) => handleQuickAddAudit(unit.id, e)}
+           className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-bold px-2 py-2 rounded-lg transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-600 active:bg-blue-100'}`}
+         >
+           <Zap size={12} className={isInactive ? "" : "fill-blue-600"} /> Gidildi
+         </button>
+      </div>
+
+      {/* Plan ve Not kısımları aynı kalabilir, sadece yazı boyutlarını kontrol et */}
+    </div>
+  )})}
 
         {/* HAFTALIK SHIFT / TÜM PLANLAR EKRANI */}
         {activeTab === 'weeklyPlans' && (

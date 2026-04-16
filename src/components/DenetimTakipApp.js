@@ -118,6 +118,10 @@ export default function DenetimTakipApp({ onBack }) {
   // HIZLI PLANLAMA MODALI İÇİN STATE
   const [quickPlanUnit, setQuickPlanUnit] = useState(null);
   const [quickPlanDate, setQuickPlanDate] = useState(getLocalYYYYMMDD());
+
+  // GEÇMİŞ ZİYARET EKLEME MODALI İÇİN STATE (YENİ)
+  const [pastAuditUnit, setPastAuditUnit] = useState(null);
+  const [pastAuditDate, setPastAuditDate] = useState(getLocalYYYYMMDD());
   
   // FİLTRELEME DURUMLARI
   const [urgencyFilter, setUrgencyFilter] = useState('all'); 
@@ -452,6 +456,12 @@ export default function DenetimTakipApp({ onBack }) {
     const uid = auth.currentUser?.uid;
     if (!unitId || !date || !uid) return false;
     
+    // YENİ KURAL: Geçmiş tarihe plan yapılamaz
+    if (date < getLocalYYYYMMDD()) {
+      setErrorMsg('Geçmiş tarihlere plan yapılamaz!');
+      return false;
+    }
+    
     const u = units.find(x => x.id === unitId);
     if (u && u.isActive === false) {
       setErrorMsg('Geçici olarak kapalı olan şubelere plan yapılamaz!');
@@ -776,6 +786,7 @@ export default function DenetimTakipApp({ onBack }) {
               
               <input 
                 type="date" 
+                min={getLocalYYYYMMDD()} /* GEÇMİŞE PLANLAMA KISITLAMASI */
                 className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 mb-6"
                 value={quickPlanDate}
                 onChange={(e) => setQuickPlanDate(e.target.value)}
@@ -796,6 +807,51 @@ export default function DenetimTakipApp({ onBack }) {
                   className="flex-1 py-3 bg-purple-600 text-white rounded-xl text-sm font-bold active:bg-purple-700 transition shadow-md shadow-purple-200"
                 >
                   Planla
+                </button>
+              </div>
+            </div>
+         </div>
+      )}
+
+      {/* --- GEÇMİŞ ZİYARET EKLEME MODALI (YENİ) --- */}
+      {pastAuditUnit && (
+         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 p-6 text-center">
+              <div className="w-16 h-16 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <History size={32} />
+              </div>
+              <h3 className="font-bold text-lg text-gray-800 mb-2">Ziyaret Kaydı Ekle</h3>
+              <p className="text-sm text-gray-500 mb-4"><strong>{pastAuditUnit.name}</strong> şubesine yapılan ziyaretin tarihini seçin:</p>
+              
+              <input 
+                type="date" 
+                max={getLocalYYYYMMDD()} /* GELECEK TARİHE ZİYARET GİRİLEMEZ */
+                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-green-500 mb-6"
+                value={pastAuditDate}
+                onChange={(e) => setPastAuditDate(e.target.value)}
+              />
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setPastAuditUnit(null)} 
+                  className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold active:bg-gray-200 transition"
+                >
+                  İptal
+                </button>
+                <button 
+                  onClick={() => {
+                    const existingAudit = audits.find(a => a.date === pastAuditDate && a.unitId === pastAuditUnit.id);
+                    if (existingAudit) {
+                      setErrorMsg(`${formatDateDisplay(pastAuditDate)} tarihinde bu şubeye zaten gidilmiş!`);
+                      return;
+                    }
+                    const existingPlan = plans.find(p => p.unitId === pastAuditUnit.id && p.date === pastAuditDate);
+                    setPendingAudit({ unitId: pastAuditUnit.id, date: pastAuditDate, planId: existingPlan?.id, step: 'ask' });
+                    setPastAuditUnit(null);
+                  }} 
+                  className="flex-1 py-3 bg-green-600 text-white rounded-xl text-sm font-bold active:bg-green-700 transition shadow-md shadow-green-200"
+                >
+                  İleri
                 </button>
               </div>
             </div>
@@ -927,67 +983,76 @@ export default function DenetimTakipApp({ onBack }) {
                 >
                   <div className={`absolute top-0 left-0 w-1 h-full ${getStatusIndicatorColor(unit.days, unit.isActive)}`}></div>
                   
-                  <div className="flex justify-between items-start pl-2 gap-2">
-                    {/* SOL TARAF */}
-                    <div className="min-w-0 flex-1"> 
-                      <p className={`text-[10px] font-bold uppercase tracking-wide truncate ${isInactive ? 'text-red-400' : 'text-gray-400'}`}>
-                        {unit.city} {unit.district ? `• ${unit.district}` : ''} {isInactive && '• KAPALI'}
-                      </p>
-                      <h3 className={`font-bold text-[15px] leading-tight mt-0.5 truncate ${isInactive ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-800'}`}>
-                        {unit.name}
-                      </h3>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-                        <p className="text-[11px] text-gray-500 flex items-center gap-1 font-medium whitespace-nowrap">
-                          <Calendar size={12} className="text-gray-400" /> {formatDateDisplay(unit.lastAudit)}
-                        </p>
-                        <p className="text-[11px] text-gray-500 flex items-center gap-1 font-medium bg-gray-50 px-1.5 py-0.5 rounded-md whitespace-nowrap">
-                          <History size={12} className="text-gray-400" /> Toplam: {unit.totalVisits}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {/* SAĞ TARAF: Butonlar */}
-                    <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusColor(unit.days, unit.isActive)} text-center w-full`}>
-                        {getStatusLabel(unit.days, unit.isActive)}
-                      </div>
-                      <div className="flex gap-1">
-                         <button 
-                           disabled={isInactive}
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             setQuickPlanUnit(unit);
-                             setQuickPlanDate(getLocalYYYYMMDD());
-                           }}
-                           className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1.5 rounded-lg whitespace-nowrap transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-purple-50 text-purple-600 active:bg-purple-100'}`}
-                         >
-                           <CalendarPlus size={12} /> Planla
-                         </button>
-                         <button 
-                           disabled={isInactive}
-                           onClick={(e) => handleQuickAddAudit(unit.id, e)}
-                           className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1.5 rounded-lg whitespace-nowrap transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-600 active:bg-blue-100'}`}
-                         >
-                           <Zap size={12} className={isInactive ? "" : "fill-blue-600"} /> Gidildi
-                         </button>
-                      </div>
-                    </div>
+                  {/* SATIR 1: BİRİM ADI VE İL/İLÇE */}
+                  <div className="pl-2">
+                    <h3 className={`font-bold text-[14px] leading-tight truncate ${isInactive ? 'text-gray-500 line-through decoration-red-300' : 'text-gray-800'}`}>
+                      {unit.name} <span className="text-[12px] font-medium text-gray-500 ml-1">- {unit.city} / {unit.district}</span>
+                      {isInactive && <span className="text-red-500 font-bold ml-1 text-[11px]">(KAPALI)</span>}
+                    </h3>
                   </div>
 
-                  {/* PLAN BİLGİSİ */}
+                  {/* SATIR 2: TARİH, TOPLAM ZİYARET VE DURUM BİLGİSİ */}
+                  <div className="flex justify-between items-center pl-2 gap-1 overflow-hidden">
+                     <div className="flex items-center gap-1 overflow-x-auto no-scrollbar shrink">
+                        <p className="text-[11px] text-gray-600 flex items-center gap-1 font-medium bg-gray-50 px-1.5 py-1 rounded-md whitespace-nowrap border border-gray-100">
+                          <Calendar size={12} className="text-blue-500" /> {formatDateDisplay(unit.lastAudit)}
+                        </p>
+                        <p className="text-[11px] text-gray-600 flex items-center gap-1 font-medium bg-gray-50 px-1.5 py-1 rounded-md whitespace-nowrap border border-gray-100">
+                          <History size={12} className="text-purple-500" /> Toplam: {unit.totalVisits}
+                        </p>
+                     </div>
+                     <div className={`px-2 py-1 rounded-md text-[10px] font-bold border ${getStatusColor(unit.days, unit.isActive)} text-center shrink-0 whitespace-nowrap`}>
+                        {getStatusLabel(unit.days, unit.isActive)}
+                     </div>
+                  </div>
+
+                  {/* SATIR 3: BUTONLAR (PLANLA, GİDİLDİ, ZİYARET EKLE) */}
+                  <div className="flex gap-1.5 pl-2 w-full mt-1">
+                     <button 
+                       disabled={isInactive}
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         setQuickPlanUnit(unit);
+                         setQuickPlanDate(getLocalYYYYMMDD());
+                       }}
+                       className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold px-1 py-2 rounded-lg transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-purple-50 text-purple-600 active:bg-purple-100 border border-purple-100'}`}
+                     >
+                       <CalendarPlus size={14} /> Planla
+                     </button>
+                     <button 
+                       disabled={isInactive}
+                       onClick={(e) => handleQuickAddAudit(unit.id, e)}
+                       className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold px-1 py-2 rounded-lg transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-600 active:bg-blue-100 border border-blue-100'}`}
+                     >
+                       <Zap size={14} className={isInactive ? "" : "fill-blue-600"} /> Gidildi
+                     </button>
+                     <button 
+                       disabled={isInactive}
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         setPastAuditUnit(unit);
+                         setPastAuditDate(getLocalYYYYMMDD());
+                       }}
+                       className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold px-1 py-2 rounded-lg transition-colors ${isInactive ? 'bg-gray-100 text-gray-400' : 'bg-green-50 text-green-600 active:bg-green-100 border border-green-100'}`}
+                     >
+                       <History size={14} /> Ziyaret Ekle
+                     </button>
+                  </div>
+
+                  {/* PLAN BİLGİSİ (Varsa görünür) */}
                   {unit.nextPlan && (
                     <div className="pl-2 mt-1">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1.5 rounded-lg border border-purple-100">
                         <CalendarPlus size={12} /> Planlı: {formatDateDisplay(unit.nextPlan.date)}
                       </span>
                     </div>
                   )}
                   
-                  {/* NOT GÖSTERİMİ */}
+                  {/* SATIR 4: EN SON ZİYARET NOTU (Varsa görünür) */}
                   {unit.latestNote && (
-                    <div className="pl-2 mt-1 flex items-start gap-1.5 text-[11px] text-gray-500 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                    <div className="pl-2 mt-1 flex items-start gap-1.5 text-[11px] text-gray-500 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
                       <FileText size={12} className="mt-0.5 shrink-0 text-gray-400" />
-                      <p className="line-clamp-2 italic">{unit.latestNote}</p>
+                      <p className="line-clamp-2 italic leading-relaxed">{unit.latestNote}</p>
                     </div>
                   )}
                 </div>
@@ -1108,6 +1173,7 @@ export default function DenetimTakipApp({ onBack }) {
                       <div className="flex gap-2">
                         <input 
                           type="date" 
+                          min={getLocalYYYYMMDD()}
                           className="flex-1 p-2 rounded-lg border border-purple-200 text-sm font-medium outline-none focus:ring-2 focus:ring-purple-400"
                           value={planDate}
                           onChange={(e) => setPlanDate(e.target.value)}
@@ -1129,6 +1195,7 @@ export default function DenetimTakipApp({ onBack }) {
                       <div className="flex gap-2">
                         <input 
                           type="date" 
+                          max={getLocalYYYYMMDD()}
                           className="flex-1 p-2 rounded-lg border border-blue-200 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-400"
                           value={detailAuditDate}
                           onChange={(e) => setDetailAuditDate(e.target.value)}
@@ -1307,6 +1374,7 @@ export default function DenetimTakipApp({ onBack }) {
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 ml-1">Tarih</label>
                   <input 
                     type="date" 
+                    max={getLocalYYYYMMDD()}
                     className="w-full p-4 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700 text-sm transition"
                     value={newAudit.date}
                     onChange={(e) => setNewAudit({...newAudit, date: e.target.value})}
@@ -1533,4 +1601,3 @@ export default function DenetimTakipApp({ onBack }) {
     </div>
   );
 }
-

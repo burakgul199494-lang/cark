@@ -774,7 +774,7 @@ export default function DenetimTakipApp({ onBack }) {
          </div>
       )}
 
-      {/* --- HIZLI PLANLAMA MODALI --- */}
+{/* --- HIZLI PLANLAMA MODALI --- */}
       {quickPlanUnit && (
          <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl w-full max-w-[340px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 p-6 text-center">
@@ -784,13 +784,17 @@ export default function DenetimTakipApp({ onBack }) {
               <h3 className="font-bold text-lg text-gray-800 mb-2">Hızlı Planlama</h3>
               <p className="text-sm text-gray-500 mb-4"><strong>{quickPlanUnit.name}</strong> şubesi için plan tarihi seçin:</p>
               
-              <input 
-                type="date" 
-                min={getLocalYYYYMMDD()}
-                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold block text-center text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 mb-6"
-                value={quickPlanDate}
-                onChange={(e) => setQuickPlanDate(e.target.value)}
-              />
+              {/* TARİH INPUTU (TAM ORTALAMA İÇİN ÖZEL SARMALAYICI) */}
+              <div className="mb-6 flex justify-center w-full bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-purple-500 transition-all overflow-hidden">
+                <input 
+                  type="date" 
+                  min={getLocalYYYYMMDD()}
+                  className="w-full p-3 bg-transparent text-sm font-bold text-gray-700 outline-none text-center appearance-none"
+                  style={{ textAlign: 'center', display: 'flex', justifyContent: 'center' }}
+                  value={quickPlanDate}
+                  onChange={(e) => setQuickPlanDate(e.target.value)}
+                />
+              </div>
               
               <div className="flex gap-3">
                 <button 
